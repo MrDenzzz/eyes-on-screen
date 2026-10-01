@@ -16,8 +16,9 @@ webrtc:
   listen: ""
 
 streams:
-  # Added after logging in (WebUI > Add > Xiaomi). The URL looks like:
-  # c400: xiaomi://<user_id>:<region>@<camera_ip>?did=<device_id>&model=chuangmi.camera.039a04
+  # Added after logging in (WebUI > Add > Xiaomi), plus `&subtype=3` for 2560x1440
+  # (the default quality is only 864x480 on C400). The URL looks like:
+  # c400: xiaomi://<user_id>:<region>@<camera_ip>?did=<device_id>&model=chuangmi.camera.039c04&subtype=3
 
   # Fallback if the HEVC stream is unstable for the app: re-encode to H.264 on an
   # NVIDIA GPU (needs ffmpeg in PATH). Point video.rtsp_url at .../c400_h264.

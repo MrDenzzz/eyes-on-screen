@@ -51,10 +51,15 @@ go2rtc reads `go2rtc.yaml` from the current folder; the log shows `config path=.
 
    ```yaml
    streams:
-     c400: xiaomi://<user_id>:<region>@<camera_ip>?did=<device_id>&model=chuangmi.camera.039a04
+     c400: xiaomi://<user_id>:<region>@<camera_ip>?did=<device_id>&model=chuangmi.camera.039c04&subtype=3
    ```
 
    `model` tells which revision you have (`039a04` or `039c04`).
+4. Append `&subtype=3` to the generated URL. With the default quality the C400
+   (`039c04`) streams only 864x480, far too small for faces across the room; `subtype=3`
+   gives 2560x1440 HEVC at 20 fps. The go2rtc docs note that newer cameras keep HD at 3.
+5. Give the camera a fixed IP in the router (DHCP reservation by MAC): the IP is part of
+   the URL, and the stream breaks if the camera gets a new address.
 
 ## 3. Check the stream
 
@@ -84,9 +89,9 @@ Symptoms from #2030: stutter, a continuous flow of `Could not find ref with POC`
 `Error constructing the frame RPS`. Try in this order:
 
 1. Check the version: `.\go2rtc.exe -version` must print 1.9.14 or newer.
-2. Lower the quality: append `&subtype=sd` to the stream URL. Per the go2rtc docs,
-   `subtype` accepts `hd`, `sd`, `auto` or `0-5`; the default is 2, and some newer cameras
-   have HD at 3.
+2. Lower the quality: replace `subtype=3` with `subtype=sd`. Per the go2rtc docs,
+   `subtype` accepts `hd`, `sd`, `auto` or `0-5`; the default is 2. Faces get smaller,
+   so detection range suffers.
 3. Re-encode to H.264 on the NVIDIA GPU: uncomment `c400_h264` in `go2rtc.yaml` and set
    `video.rtsp_url: "rtsp://127.0.0.1:8554/c400_h264"`. This needs ffmpeg in `PATH`.
    It fixes decoding trouble on the app side, but cannot restore packets lost between the
