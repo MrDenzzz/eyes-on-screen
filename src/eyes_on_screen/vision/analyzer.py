@@ -107,6 +107,14 @@ class FaceAnalyzer:
         # A plain attribute swap: the analysis thread sees either the old or the new ROI.
         self._roi = roi
 
+    def close(self) -> None:
+        """Release the models. Call it explicitly: MediaPipe's own finalizer can deadlock
+        when the garbage collector runs it at an unlucky moment."""
+        for model in (self._detect_faces, self._estimate_face):
+            close = getattr(model, "close", None)
+            if close is not None:
+                close()
+
     def analyze(self, image: np.ndarray) -> list[FaceObservation]:
         height, width = image.shape[:2]
         roi = self._roi

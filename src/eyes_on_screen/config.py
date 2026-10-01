@@ -28,6 +28,8 @@ class _Section(BaseModel):
 class VideoSourceKind(StrEnum):
     RTSP = "rtsp"
     WEBCAM = "webcam"
+    FILE = "file"
+    """A recorded video, played at its own frame rate in a loop: demos and tests."""
 
 
 class FaceLostAction(StrEnum):
@@ -48,6 +50,7 @@ class VideoConfig(_Section):
     source: VideoSourceKind = VideoSourceKind.RTSP
     rtsp_url: str | None = None
     webcam_index: int = Field(default=0, ge=0)
+    file: Path | None = None
     process_fps: float = Field(default=10.0, gt=0, le=60)
     reconnect_delay_s: float = Field(default=2.0, gt=0)
 
@@ -62,6 +65,8 @@ class VideoConfig(_Section):
     def _check_source_settings(self) -> VideoConfig:
         if self.source is VideoSourceKind.RTSP and not self.rtsp_url:
             raise ValueError("rtsp_url is required when source is 'rtsp'")
+        if self.source is VideoSourceKind.FILE and not self.file:
+            raise ValueError("file is required when source is 'file'")
         return self
 
 
@@ -192,6 +197,7 @@ class AppConfig(_Section):
 
         return self.model_copy(
             update={
+                "video": self.video.model_copy(update={"file": anchor_optional(self.video.file)}),
                 "detection": self.detection.model_copy(
                     update={"models_dir": anchor(self.detection.models_dir)}
                 ),

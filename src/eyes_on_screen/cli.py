@@ -124,7 +124,8 @@ def cmd_run(config: AppConfig, args: argparse.Namespace) -> int:
         app = App(config, args.config, source, analyzer, player, dry_run=args.dry_run)
         asyncio.run(_serve(app, config))
 
-    return _with_camera(config, body)
+    with contextlib.closing(analyzer):
+        return _with_camera(config, body)
 
 
 async def _serve(app: App, config: AppConfig) -> None:

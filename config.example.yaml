@@ -5,9 +5,11 @@
 video:
   # rtsp   - stream re-published locally by go2rtc (Xiaomi C400)
   # webcam - local camera by index (fallback)
+  # file   - a recorded video, played at its own frame rate in a loop (demos, tests)
   source: rtsp
   rtsp_url: "rtsp://127.0.0.1:8554/c400"
   webcam_index: 0
+  # file: recordings/sofa.mp4
   # Frames analysed per second; newer frames replace older ones, nothing is queued.
   process_fps: 10
   # Delay between reconnection attempts when the stream drops.

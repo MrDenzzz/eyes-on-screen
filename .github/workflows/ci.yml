@@ -17,7 +17,15 @@ jobs:
       - run: uv sync --locked
       - run: uv run ruff check
       - run: uv run ruff format --check
+      # The end-to-end tests run the real face models; the download verifies checksums.
+      - uses: actions/cache@v6
+        with:
+          path: models
+          key: models-${{ hashFiles('src/eyes_on_screen/vision/models.py') }}
+      - run: uv run eos --config config.example.yaml download-models
       - run: uv run pytest -q
+        env:
+          EOS_REQUIRE_MODELS: "1"
 
   frontend:
     name: Frontend (types, tests, build)

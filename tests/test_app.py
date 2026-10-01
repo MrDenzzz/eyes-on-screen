@@ -8,7 +8,7 @@ import numpy as np
 import pytest
 
 from eyes_on_screen.app import App
-from eyes_on_screen.appletv.state import AppleTvError, Playback, PlayerState
+from eyes_on_screen.appletv.state import AppleTvError
 from eyes_on_screen.config import load_config
 from eyes_on_screen.logging_setup import EVENTS_LOGGER
 from eyes_on_screen.settings import SettingsError
@@ -57,38 +57,6 @@ class Viewer:
         )
 
 
-class FakePlayer:
-    """Plays until told otherwise; every command is confirmed like a push update."""
-
-    def __init__(self) -> None:
-        self.name = "Test TV"
-        self.on_state = None
-        self.connected = False
-        self.state: PlayerState | None = None
-        self.commands: list[str] = []
-
-    async def run_forever(self):
-        self.connected = True
-        self._set(Playback.PLAYING)
-        await asyncio.Event().wait()
-
-    async def play(self):
-        self.commands.append("play")
-        self._set(Playback.PLAYING)
-
-    async def pause(self):
-        self.commands.append("pause")
-        self._set(Playback.PAUSED)
-
-    async def close(self):
-        self.connected = False
-
-    def _set(self, playback: Playback) -> None:
-        self.state = PlayerState(playback, app="TV", title="Show")
-        if self.on_state:
-            self.on_state(self.state)
-
-
 def write_config(tmp_path, extra: str = ""):
     path = tmp_path / "config.yaml"
     path.write_text(
@@ -125,8 +93,8 @@ def run_app(app: App, scenario) -> None:
 
 
 class TestPipeline:
-    def test_looking_away_pauses_and_looking_back_resumes(self, tmp_path):
-        viewer, player = Viewer(), FakePlayer()
+    def test_looking_away_pauses_and_looking_back_resumes(self, tmp_path, player):
+        viewer = Viewer()
         app = make_app(tmp_path, viewer, player)
 
         async def scenario():
@@ -139,8 +107,8 @@ class TestPipeline:
         run_app(app, scenario)
         assert player.connected is False  # closed on the way out
 
-    def test_nobody_there_pauses_too(self, tmp_path):
-        viewer, player = Viewer(), FakePlayer()
+    def test_nobody_there_pauses_too(self, tmp_path, player):
+        viewer = Viewer()
         app = make_app(tmp_path, viewer, player)
 
         async def scenario():
@@ -150,8 +118,8 @@ class TestPipeline:
 
         run_app(app, scenario)
 
-    def test_dry_run_only_logs(self, tmp_path, caplog):
-        viewer, player = Viewer(), FakePlayer()
+    def test_dry_run_only_logs(self, tmp_path, caplog, player):
+        viewer = Viewer()
         app = make_app(tmp_path, viewer, player, dry_run=True)
 
         async def scenario():

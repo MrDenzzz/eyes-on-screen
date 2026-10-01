@@ -8,7 +8,13 @@ import pytest
 
 from eyes_on_screen.config import VideoConfig
 from eyes_on_screen.video import capture as capture_module
-from eyes_on_screen.video.capture import CaptureError, CaptureSource, create_source, redact_url
+from eyes_on_screen.video.capture import (
+    CaptureError,
+    CaptureSource,
+    PacedFile,
+    create_source,
+    redact_url,
+)
 
 FRAME_SHAPE = (4, 6, 3)
 HEVC = float(int.from_bytes(b"hevc", "little"))
@@ -225,3 +231,79 @@ def test_create_source_describes_the_configured_source():
 
     assert rtsp.stats().description == "rtsp://u:***@cam/s"
     assert webcam.stats().description == "webcam #1"
+
+
+class ClipCapture:
+    """A three-frame clip at 20 fps that rewinds when asked to."""
+
+    def __init__(self) -> None:
+        self.position = 0
+        self.rewinds = 0
+
+    def read(self):
+        if self.position >= 3:
+            return False, None
+        self.position += 1
+        return True, np.full(FRAME_SHAPE, self.position, np.uint8)
+
+    def get(self, prop_id):
+        return 20.0 if prop_id == cv2.CAP_PROP_FPS else 0.0
+
+    def set(self, prop_id, value):
+        assert prop_id == cv2.CAP_PROP_POS_FRAMES
+        self.position = int(value)
+        self.rewinds += 1
+        return True
+
+    def release(self):
+        pass
+
+
+class TestPacedFile:
+    def test_frames_come_at_the_file_frame_rate(self):
+        paced = PacedFile(ClipCapture())
+
+        started = time.monotonic()
+        for _ in range(3):
+            assert paced.read()[0]
+
+        assert time.monotonic() - started >= 2 / 20 * 0.9  # two waits of one frame period
+
+    def test_the_clip_starts_over_at_the_end(self):
+        clip = ClipCapture()
+        paced = PacedFile(clip)
+
+        values = [int(paced.read()[1][0, 0, 0]) for _ in range(5)]
+
+        assert values == [1, 2, 3, 1, 2]
+        assert clip.rewinds == 1
+
+    def test_a_real_video_file_plays_in_a_loop(self, tmp_path):
+        path = tmp_path / "clip.avi"
+        writer = cv2.VideoWriter(str(path), cv2.VideoWriter.fourcc(*"MJPG"), 50, (64, 48))
+        for value in range(5):
+            writer.write(np.full((48, 64, 3), value * 40, np.uint8))
+        writer.release()
+        source = create_source(VideoConfig(source="file", file=path))
+
+        source.start()
+        try:
+            frame = None
+            deadline = time.monotonic() + 5
+            while time.monotonic() < deadline:
+                frame = source.wait_for_frame(frame.seq if frame else -1, timeout=1.0)
+                assert frame is not None
+                if frame.seq > 8:  # more frames than the file has: it looped
+                    break
+            stats = source.stats()
+        finally:
+            source.stop()
+        assert frame is not None and frame.seq > 8
+        assert frame.image.shape == (48, 64, 3)
+        assert stats.description == "video file clip.avi"
+
+    def test_a_missing_file_is_a_capture_error(self, tmp_path):
+        from eyes_on_screen.video.capture import open_file
+
+        with pytest.raises(CaptureError, match="cannot open video file"):
+            open_file(tmp_path / "missing.mp4")

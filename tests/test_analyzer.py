@@ -126,3 +126,20 @@ def test_observation_geometry():
 
     assert face.center == pytest.approx((0.3, 0.6))
     assert face.area == pytest.approx(0.08)
+
+
+def test_close_releases_the_models_that_hold_resources():
+    closed = []
+
+    class Estimator:
+        def __call__(self, crop):
+            return None
+
+        def close(self):
+            closed.append("estimator")
+
+    analyzer = FaceAnalyzer((0, 0, 1, 1), lambda image: [], Estimator(), max_faces=1)
+
+    analyzer.close()
+
+    assert closed == ["estimator"]

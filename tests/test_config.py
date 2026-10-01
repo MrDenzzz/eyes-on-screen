@@ -159,3 +159,12 @@ class TestConfigCheckCommand:
 
         assert exit_code == cli.EXIT_CONFIG_ERROR
         assert "rtsp_url is required" in capsys.readouterr().err
+
+
+def test_a_video_file_source_needs_a_file_relative_to_the_config(tmp_path):
+    with pytest.raises(ConfigError, match="file is required"):
+        load_config(write_config(tmp_path, "video: {source: file}"))
+
+    config = load_config(write_config(tmp_path, "video: {source: file, file: clips/sofa.mp4}"))
+
+    assert config.video.file == tmp_path.resolve() / "clips" / "sofa.mp4"

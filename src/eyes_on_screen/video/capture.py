@@ -1,4 +1,4 @@
-"""OpenCV-backed video sources: RTSP from go2rtc or a local webcam, read on a background thread."""
+"""OpenCV-backed video sources (RTSP from go2rtc, a webcam, a video file), read on a thread."""
 
 from __future__ import annotations
 
@@ -8,6 +8,7 @@ import threading
 import time
 from collections import deque
 from collections.abc import Callable
+from pathlib import Path
 from typing import Protocol
 from urllib.parse import urlsplit, urlunsplit
 
@@ -32,6 +33,7 @@ WARMUP_MAX_S = 8.0
 # Frames older than this mean the stream stalled, so the measured fps drops to 0.
 _STALL_AFTER_S = 1.0
 _FPS_WINDOW = 30
+_DEFAULT_FILE_FPS = 25.0
 
 
 class CaptureError(Exception):
@@ -44,6 +46,8 @@ class Capture(Protocol):
     def read(self) -> tuple[bool, np.ndarray | None]: ...
 
     def get(self, prop_id: int) -> float: ...
+
+    def set(self, prop_id: int, value: float) -> bool: ...
 
     def release(self) -> None: ...
 
@@ -234,11 +238,57 @@ def open_webcam(index: int) -> cv2.VideoCapture:
     return capture
 
 
+class PacedFile:
+    """A video file read like a camera: at its own frame rate, from the start again at the end."""
+
+    def __init__(self, capture: Capture, clock: Callable[[], float] = time.monotonic) -> None:
+        self._capture = capture
+        self._clock = clock
+        fps = capture.get(cv2.CAP_PROP_FPS)
+        self._period = 1.0 / (fps if fps > 0 else _DEFAULT_FILE_FPS)
+        self._due: float | None = None
+
+    def read(self) -> tuple[bool, np.ndarray | None]:
+        now = self._clock()
+        if self._due is not None and now < self._due:
+            time.sleep(self._due - now)
+        # Falling behind (slow decode) drops the backlog instead of rushing to catch up.
+        self._due = max((self._due or now) + self._period, self._clock())
+        ok, image = self._capture.read()
+        if not ok:
+            self._capture.set(cv2.CAP_PROP_POS_FRAMES, 0)
+            ok, image = self._capture.read()
+        return ok, image
+
+    def get(self, prop_id: int) -> float:
+        return self._capture.get(prop_id)
+
+    def set(self, prop_id: int, value: float) -> bool:
+        return self._capture.set(prop_id, value)
+
+    def release(self) -> None:
+        self._capture.release()
+
+
+def open_file(path: Path) -> PacedFile:
+    capture = cv2.VideoCapture(str(path))
+    if not capture.isOpened():
+        capture.release()
+        raise CaptureError(f"cannot open video file {path}")
+    return PacedFile(capture)
+
+
 def create_source(config: VideoConfig) -> CaptureSource:
     if config.source is VideoSourceKind.RTSP:
         url = config.rtsp_url
         assert url is not None, "guaranteed by config validation"
         return CaptureSource(redact_url(url), lambda: open_rtsp(url), config.reconnect_delay_s)
+    if config.source is VideoSourceKind.FILE:
+        path = config.file
+        assert path is not None, "guaranteed by config validation"
+        return CaptureSource(
+            f"video file {path.name}", lambda: open_file(path), config.reconnect_delay_s
+        )
 
     index = config.webcam_index
     return CaptureSource(f"webcam #{index}", lambda: open_webcam(index), config.reconnect_delay_s)
