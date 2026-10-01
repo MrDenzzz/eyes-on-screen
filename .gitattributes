@@ -1,0 +1,9 @@
+# LF everywhere, also in Windows working copies: the CI compares generated files byte for byte.
+* text=auto eol=lf
+
+# Generated: collapsed in GitHub diffs and left out of language stats.
+src/eyes_on_screen/web/static/** linguist-generated=true
+frontend/src/protocol/types.ts linguist-generated=true
+frontend/src/protocol/schema.json linguist-generated=true
+uv.lock linguist-generated=true
+frontend/package-lock.json linguist-generated=true
