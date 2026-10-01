@@ -1,0 +1,32 @@
+{
+  "name": "eyes-on-screen-ui",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "description": "Web UI of eyes-on-screen: live video with overlays, viewers, player state and settings.",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc --noEmit && vite build",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "gen:schema": "uv run --project .. python -m eyes_on_screen.web.messages src/protocol/schema.json",
+    "gen:types": "json2ts -i src/protocol/schema.json -o src/protocol/types.ts --unreachableDefinitions --no-additionalProperties --bannerComment \"/* Generated from src/protocol/schema.json (eyes_on_screen/web/messages.py). Do not edit: run npm run gen. */\"",
+    "gen": "npm run gen:schema && npm run gen:types"
+  },
+  "dependencies": {
+    "react": "^19.3.0",
+    "react-dom": "^19.3.0",
+    "zustand": "^5.0.15"
+  },
+  "devDependencies": {
+    "@testing-library/react": "^16.3.3",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "@vitejs/plugin-react": "^6.1.1",
+    "jsdom": "^30.1.1",
+    "json-schema-to-typescript": "^16.0.0",
+    "typescript": "^7.0.2",
+    "vite": "^8.3.2",
+    "vitest": "^5.0.3"
+  }
+}

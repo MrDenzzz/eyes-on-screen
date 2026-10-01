@@ -1,0 +1,986 @@
+{
+  "$defs": {
+    "AnalysisInfo": {
+      "additionalProperties": false,
+      "properties": {
+        "fps": {
+          "type": "number"
+        },
+        "ms": {
+          "type": "number"
+        }
+      },
+      "required": [
+        "fps",
+        "ms"
+      ],
+      "title": "AnalysisInfo",
+      "type": "object"
+    },
+    "Attention": {
+      "enum": [
+        "looking",
+        "away",
+        "absent"
+      ],
+      "title": "Attention",
+      "type": "string"
+    },
+    "AutomationCommand": {
+      "additionalProperties": false,
+      "properties": {
+        "cmd": {
+          "const": "automation",
+          "type": "string"
+        },
+        "id": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "enabled": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "cmd",
+        "enabled"
+      ],
+      "title": "AutomationCommand",
+      "type": "object"
+    },
+    "AutomationInfo": {
+      "additionalProperties": false,
+      "properties": {
+        "enabled": {
+          "type": "boolean"
+        },
+        "dry_run": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "enabled",
+        "dry_run"
+      ],
+      "title": "AutomationInfo",
+      "type": "object"
+    },
+    "BehaviorChanges": {
+      "additionalProperties": false,
+      "properties": {
+        "face_lost_after_s": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "multiple_viewers": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/MultipleViewers"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "on_face_lost": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/FaceLostAction"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "pause_after_s": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "resume_after_s": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        }
+      },
+      "title": "BehaviorChanges",
+      "type": "object"
+    },
+    "BehaviorConfig": {
+      "additionalProperties": false,
+      "properties": {
+        "pause_after_s": {
+          "default": 1.5,
+          "exclusiveMinimum": 0,
+          "type": "number"
+        },
+        "resume_after_s": {
+          "default": 0.5,
+          "exclusiveMinimum": 0,
+          "type": "number"
+        },
+        "on_face_lost": {
+          "$ref": "#/$defs/FaceLostAction"
+        },
+        "face_lost_after_s": {
+          "default": 3.0,
+          "exclusiveMinimum": 0,
+          "type": "number"
+        },
+        "multiple_viewers": {
+          "$ref": "#/$defs/MultipleViewers"
+        }
+      },
+      "required": [
+        "pause_after_s",
+        "resume_after_s",
+        "on_face_lost",
+        "face_lost_after_s",
+        "multiple_viewers"
+      ],
+      "title": "BehaviorConfig",
+      "type": "object"
+    },
+    "CalibrateCommand": {
+      "additionalProperties": false,
+      "properties": {
+        "cmd": {
+          "const": "calibrate",
+          "type": "string"
+        },
+        "id": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        }
+      },
+      "required": [
+        "cmd"
+      ],
+      "title": "CalibrateCommand",
+      "type": "object"
+    },
+    "CalibrationInfo": {
+      "additionalProperties": false,
+      "properties": {
+        "phase": {
+          "enum": [
+            "countdown",
+            "collecting"
+          ],
+          "type": "string"
+        },
+        "remaining_s": {
+          "type": "number"
+        },
+        "phase_s": {
+          "type": "number"
+        }
+      },
+      "required": [
+        "phase",
+        "remaining_s",
+        "phase_s"
+      ],
+      "title": "CalibrationInfo",
+      "type": "object"
+    },
+    "EventInfo": {
+      "additionalProperties": false,
+      "properties": {
+        "ts": {
+          "type": "integer"
+        },
+        "time": {
+          "type": "string"
+        },
+        "level": {
+          "enum": [
+            "info",
+            "warning"
+          ],
+          "type": "string"
+        },
+        "kind": {
+          "enum": [
+            "pause",
+            "resume",
+            "player",
+            "calibration",
+            "other"
+          ],
+          "type": "string"
+        },
+        "text": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "ts",
+        "time",
+        "level",
+        "kind",
+        "text"
+      ],
+      "title": "EventInfo",
+      "type": "object"
+    },
+    "EventsMessage": {
+      "additionalProperties": false,
+      "properties": {
+        "type": {
+          "const": "events",
+          "default": "events",
+          "type": "string"
+        },
+        "events": {
+          "items": {
+            "$ref": "#/$defs/EventInfo"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "type",
+        "events"
+      ],
+      "title": "EventsMessage",
+      "type": "object"
+    },
+    "FaceInfo": {
+      "additionalProperties": false,
+      "properties": {
+        "box": {
+          "maxItems": 4,
+          "minItems": 4,
+          "type": "array",
+          "items": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "number"
+            },
+            {
+              "type": "number"
+            },
+            {
+              "type": "number"
+            }
+          ],
+          "additionalItems": false
+        },
+        "state": {
+          "enum": [
+            "looking",
+            "away",
+            "ignored"
+          ],
+          "type": "string"
+        },
+        "yaw": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "pitch": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "eyes_down": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "focus": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "box",
+        "state",
+        "yaw",
+        "pitch",
+        "eyes_down",
+        "focus"
+      ],
+      "title": "FaceInfo",
+      "type": "object"
+    },
+    "FaceLostAction": {
+      "enum": [
+        "pause",
+        "ignore"
+      ],
+      "title": "FaceLostAction",
+      "type": "string"
+    },
+    "FrameHeader": {
+      "additionalProperties": false,
+      "description": "JSON header of a binary frame message; the JPEG follows it.",
+      "properties": {
+        "seq": {
+          "type": "integer"
+        },
+        "ts": {
+          "type": "integer"
+        },
+        "attention": {
+          "$ref": "#/$defs/Attention"
+        },
+        "faces": {
+          "items": {
+            "$ref": "#/$defs/FaceInfo"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "seq",
+        "ts",
+        "attention",
+        "faces"
+      ],
+      "title": "FrameHeader",
+      "type": "object"
+    },
+    "MachineInfo": {
+      "additionalProperties": false,
+      "properties": {
+        "streak_s": {
+          "type": "number"
+        },
+        "paused_by_us": {
+          "type": "boolean"
+        },
+        "armed": {
+          "type": "boolean"
+        },
+        "pending": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/PlaybackCommand"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "streak_s",
+        "paused_by_us",
+        "armed",
+        "pending"
+      ],
+      "title": "MachineInfo",
+      "type": "object"
+    },
+    "MultipleViewers": {
+      "enum": [
+        "any_away",
+        "all_away",
+        "nearest"
+      ],
+      "title": "MultipleViewers",
+      "type": "string"
+    },
+    "PageCommandEnvelope": {
+      "additionalProperties": false,
+      "description": "Only carries PageCommand into the schema (a union is not a model of its own).",
+      "properties": {
+        "command": {
+          "discriminator": {
+            "mapping": {
+              "automation": "#/$defs/AutomationCommand",
+              "calibrate": "#/$defs/CalibrateCommand",
+              "player": "#/$defs/PlayerCommand",
+              "set": "#/$defs/SetCommand"
+            },
+            "propertyName": "cmd"
+          },
+          "oneOf": [
+            {
+              "$ref": "#/$defs/SetCommand"
+            },
+            {
+              "$ref": "#/$defs/CalibrateCommand"
+            },
+            {
+              "$ref": "#/$defs/AutomationCommand"
+            },
+            {
+              "$ref": "#/$defs/PlayerCommand"
+            }
+          ],
+          "title": "PageCommand"
+        }
+      },
+      "required": [
+        "command"
+      ],
+      "title": "PageCommandEnvelope",
+      "type": "object"
+    },
+    "Playback": {
+      "enum": [
+        "playing",
+        "paused",
+        "idle",
+        "loading",
+        "stopped",
+        "seeking",
+        "unknown"
+      ],
+      "title": "Playback",
+      "type": "string"
+    },
+    "PlaybackCommand": {
+      "enum": [
+        "pause",
+        "resume"
+      ],
+      "title": "PlaybackCommand",
+      "type": "string"
+    },
+    "PlayerCommand": {
+      "additionalProperties": false,
+      "properties": {
+        "cmd": {
+          "const": "player",
+          "type": "string"
+        },
+        "id": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "action": {
+          "enum": [
+            "play",
+            "pause"
+          ],
+          "type": "string"
+        }
+      },
+      "required": [
+        "cmd",
+        "action"
+      ],
+      "title": "PlayerCommand",
+      "type": "object"
+    },
+    "PlayerInfo": {
+      "additionalProperties": false,
+      "properties": {
+        "connected": {
+          "type": "boolean"
+        },
+        "name": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "playback": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Playback"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "app": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "title": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "connected",
+        "name",
+        "playback",
+        "app",
+        "title"
+      ],
+      "title": "PlayerInfo",
+      "type": "object"
+    },
+    "PoseChanges": {
+      "additionalProperties": false,
+      "properties": {
+        "pitch_center_deg": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "pitch_tolerance_deg": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "yaw_center_deg": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "yaw_tolerance_deg": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        }
+      },
+      "title": "PoseChanges",
+      "type": "object"
+    },
+    "PoseConfig": {
+      "additionalProperties": false,
+      "properties": {
+        "yaw_center_deg": {
+          "default": 0.0,
+          "maximum": 90,
+          "minimum": -90,
+          "type": "number"
+        },
+        "pitch_center_deg": {
+          "default": 0.0,
+          "maximum": 90,
+          "minimum": -90,
+          "type": "number"
+        },
+        "yaw_tolerance_deg": {
+          "default": 20.0,
+          "exclusiveMinimum": 0,
+          "maximum": 90,
+          "type": "number"
+        },
+        "pitch_tolerance_deg": {
+          "default": 15.0,
+          "exclusiveMinimum": 0,
+          "maximum": 90,
+          "type": "number"
+        }
+      },
+      "required": [
+        "yaw_center_deg",
+        "pitch_center_deg",
+        "yaw_tolerance_deg",
+        "pitch_tolerance_deg"
+      ],
+      "title": "PoseConfig",
+      "type": "object"
+    },
+    "ReplyMessage": {
+      "additionalProperties": false,
+      "properties": {
+        "type": {
+          "const": "reply",
+          "default": "reply",
+          "type": "string"
+        },
+        "id": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "ok": {
+          "type": "boolean"
+        },
+        "error": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        }
+      },
+      "required": [
+        "type",
+        "id",
+        "ok",
+        "error"
+      ],
+      "title": "ReplyMessage",
+      "type": "object"
+    },
+    "RoomInfo": {
+      "additionalProperties": false,
+      "properties": {
+        "attention": {
+          "$ref": "#/$defs/Attention"
+        },
+        "viewers": {
+          "type": "integer"
+        },
+        "looking": {
+          "type": "integer"
+        }
+      },
+      "required": [
+        "attention",
+        "viewers",
+        "looking"
+      ],
+      "title": "RoomInfo",
+      "type": "object"
+    },
+    "SetCommand": {
+      "additionalProperties": false,
+      "properties": {
+        "cmd": {
+          "const": "set",
+          "type": "string"
+        },
+        "id": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "changes": {
+          "$ref": "#/$defs/SettingsChanges"
+        }
+      },
+      "required": [
+        "cmd",
+        "changes"
+      ],
+      "title": "SetCommand",
+      "type": "object"
+    },
+    "SettingsChanges": {
+      "additionalProperties": false,
+      "properties": {
+        "target": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/TargetChanges"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "pose": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/PoseChanges"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "behavior": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/BehaviorChanges"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        }
+      },
+      "title": "SettingsChanges",
+      "type": "object"
+    },
+    "SettingsInfo": {
+      "additionalProperties": false,
+      "properties": {
+        "roi": {
+          "maxItems": 4,
+          "minItems": 4,
+          "type": "array",
+          "items": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "number"
+            },
+            {
+              "type": "number"
+            },
+            {
+              "type": "number"
+            }
+          ],
+          "additionalItems": false
+        },
+        "pose": {
+          "$ref": "#/$defs/PoseConfig"
+        },
+        "behavior": {
+          "$ref": "#/$defs/BehaviorConfig"
+        }
+      },
+      "required": [
+        "roi",
+        "pose",
+        "behavior"
+      ],
+      "title": "SettingsInfo",
+      "type": "object"
+    },
+    "StatusMessage": {
+      "additionalProperties": false,
+      "properties": {
+        "type": {
+          "const": "status",
+          "default": "status",
+          "type": "string"
+        },
+        "stream": {
+          "$ref": "#/$defs/StreamInfo"
+        },
+        "analysis": {
+          "$ref": "#/$defs/AnalysisInfo"
+        },
+        "player": {
+          "$ref": "#/$defs/PlayerInfo"
+        },
+        "room": {
+          "$ref": "#/$defs/RoomInfo"
+        },
+        "machine": {
+          "$ref": "#/$defs/MachineInfo"
+        },
+        "automation": {
+          "$ref": "#/$defs/AutomationInfo"
+        },
+        "calibration": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/CalibrationInfo"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "settings": {
+          "$ref": "#/$defs/SettingsInfo"
+        }
+      },
+      "required": [
+        "type",
+        "stream",
+        "analysis",
+        "player",
+        "room",
+        "machine",
+        "automation",
+        "calibration",
+        "settings"
+      ],
+      "title": "StatusMessage",
+      "type": "object"
+    },
+    "StreamInfo": {
+      "additionalProperties": false,
+      "properties": {
+        "connected": {
+          "type": "boolean"
+        },
+        "width": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "height": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "fps": {
+          "type": "number"
+        },
+        "error": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "connected",
+        "width",
+        "height",
+        "fps",
+        "error"
+      ],
+      "title": "StreamInfo",
+      "type": "object"
+    },
+    "TargetChanges": {
+      "additionalProperties": false,
+      "properties": {
+        "roi": {
+          "anyOf": [
+            {
+              "maxItems": 4,
+              "minItems": 4,
+              "type": "array",
+              "items": [
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "number"
+                }
+              ],
+              "additionalItems": false
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        }
+      },
+      "title": "TargetChanges",
+      "type": "object"
+    }
+  },
+  "title": "Protocol",
+  "additionalProperties": false
+}

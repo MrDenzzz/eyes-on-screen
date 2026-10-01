@@ -16,6 +16,7 @@ from pathlib import Path
 from typing import Annotated, Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, TypeAdapter, create_model
+from pydantic.json_schema import models_json_schema
 
 from eyes_on_screen.appletv.state import Playback
 from eyes_on_screen.attention.classifier import Attention
@@ -27,7 +28,9 @@ Roi = tuple[float, float, float, float]
 
 
 class _Message(BaseModel):
-    model_config = ConfigDict(extra="forbid")
+    # Fields with defaults (like `type`) are always present in what the server sends,
+    # so they are required in the serialization schema the frontend types come from.
+    model_config = ConfigDict(extra="forbid", json_schema_serialization_defaults_required=True)
 
 
 # Server -> page
@@ -199,25 +202,63 @@ PageCommand = Annotated[
 COMMAND_ADAPTER: TypeAdapter[PageCommand] = TypeAdapter(PageCommand)
 
 
-class Protocol(_Message):
-    """Not sent anywhere: gathers every message so one schema describes them all."""
+class PageCommandEnvelope(_Message):
+    """Only carries PageCommand into the schema (a union is not a model of its own)."""
 
-    status: StatusMessage
-    frame: FrameHeader
-    events: EventsMessage
-    reply: ReplyMessage
     command: PageCommand
 
 
 def protocol_schema() -> dict[str, Any]:
-    return Protocol.model_json_schema(mode="serialization")
+    """One JSON Schema with every message, shaped for json-schema-to-typescript.
+
+    Server messages use the serialization schema (what is actually sent), page commands
+    the validation one (optional fields stay optional). Property titles and defaults
+    next to $refs are dropped so the generator does not emit an alias per field or
+    duplicate enums, and 2020-12 `prefixItems` tuples are rewritten to the draft-07
+    form it understands.
+    """
+    _, schema = models_json_schema(
+        [
+            (StatusMessage, "serialization"),
+            (FrameHeader, "serialization"),
+            (EventsMessage, "serialization"),
+            (ReplyMessage, "serialization"),
+            (PageCommandEnvelope, "validation"),
+        ],
+        title="Protocol",
+    )
+    schema["additionalProperties"] = False
+    return _for_json2ts(schema)
+
+
+def _for_json2ts(node: Any) -> Any:
+    if isinstance(node, list):
+        return [_for_json2ts(item) for item in node]
+    if not isinstance(node, dict):
+        return node
+    node = {key: _for_json2ts(value) for key, value in node.items()}
+    if "$ref" in node:
+        # A `default` next to a $ref makes the generator emit a duplicate type.
+        node.pop("default", None)
+    if "prefixItems" in node:
+        node["items"] = node.pop("prefixItems")
+        node["additionalItems"] = False
+    if isinstance(node.get("properties"), dict):
+        for prop in node["properties"].values():
+            # Unions keep their title: it names the generated type (PageCommand).
+            if isinstance(prop, dict) and "discriminator" not in prop:
+                prop.pop("title", None)
+    return node
 
 
 def main(argv: list[str]) -> int:
     if len(argv) != 2:
         print("usage: python -m eyes_on_screen.web.messages <schema.json>", file=sys.stderr)
         return 2
-    Path(argv[1]).write_text(json.dumps(protocol_schema(), indent=2) + "\n", encoding="utf-8")
+    # LF on every OS: the file is compared byte for byte in CI.
+    Path(argv[1]).write_text(
+        json.dumps(protocol_schema(), indent=2) + "\n", encoding="utf-8", newline="\n"
+    )
     return 0
 
 

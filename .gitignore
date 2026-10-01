@@ -26,3 +26,6 @@ models/
 
 # Runtime logs
 logs/
+
+# Frontend dependencies (the built UI in src/eyes_on_screen/web/static is committed)
+frontend/node_modules/

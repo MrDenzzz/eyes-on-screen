@@ -25,6 +25,17 @@ uv run eos run --dry-run   # only log what would be paused / resumed
 
 Pause and resume events with their reasons go to `logs/events.log`.
 
+How it decides:
+
+- Pause while playing once the viewers looked away for `behavior.pause_after_s`
+  (or nobody is there for `face_lost_after_s`, if `on_face_lost: pause`).
+- Resume only a pause it made, once the viewers look back for `resume_after_s`.
+  A pause from the remote is never undone.
+- After someone starts playback themselves, it waits until a viewer is seen looking
+  at the screen before pausing again (listening from the kitchen stays possible).
+- Several viewers: `behavior.multiple_viewers` = `any_away` (default), `all_away`
+  or `nearest`.
+
 ### Web UI
 
 `eos run` also serves a web UI at <http://127.0.0.1:8765>: live video with the viewing
@@ -37,16 +48,22 @@ with its comments intact.
 To open it from another device (a laptop on the sofa), set `web.host: 0.0.0.0` and a
 `web.password`: the page shows a live camera, so it never goes on the network without one.
 
-How it decides:
+The UI is a React + TypeScript app in `frontend/` (Vite, zustand, Vitest). Its build is
+committed to `src/eyes_on_screen/web/static`, so running eos needs no Node.js. The
+WebSocket protocol is defined once, as pydantic models in `web/messages.py`; their JSON
+Schema generates the TypeScript types, and a test fails when the two drift apart.
 
-- Pause while playing once the viewers looked away for `behavior.pause_after_s`
-  (or nobody is there for `face_lost_after_s`, if `on_face_lost: pause`).
-- Resume only a pause it made, once the viewers look back for `resume_after_s`.
-  A pause from the remote is never undone.
-- After someone starts playback themselves, it waits until a viewer is seen looking
-  at the screen before pausing again (listening from the kitchen stays possible).
-- Several viewers: `behavior.multiple_viewers` = `any_away` (default), `all_away`
-  or `nearest`.
+## Development
+
+```shell
+uv run pytest && uv run ruff check        # backend
+cd frontend
+npm ci
+npm run dev        # hot-reloading UI on :5173, proxied to a running `eos run`
+npm test           # Vitest + Testing Library
+npm run gen        # after changing web/messages.py: schema.json + types.ts
+npm run build      # rebuild the UI served by eos (commit the result)
+```
 
 ## Camera
 

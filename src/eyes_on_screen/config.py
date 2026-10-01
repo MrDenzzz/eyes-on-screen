@@ -19,7 +19,10 @@ class ConfigError(Exception):
 
 class _Section(BaseModel):
     # extra="forbid" turns a typo in a key into an error instead of a silently ignored setting.
-    model_config = ConfigDict(extra="forbid", frozen=True)
+    # Schema only: sections sent to the web UI always carry every field.
+    model_config = ConfigDict(
+        extra="forbid", frozen=True, json_schema_serialization_defaults_required=True
+    )
 
 
 class VideoSourceKind(StrEnum):
