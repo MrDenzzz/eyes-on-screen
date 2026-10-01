@@ -32,6 +32,15 @@ class FaceLostAction(StrEnum):
     IGNORE = "ignore"
 
 
+class MultipleViewers(StrEnum):
+    ANY_AWAY = "any_away"
+    """Pause as soon as any viewer looks away."""
+    ALL_AWAY = "all_away"
+    """Keep playing while at least one viewer looks at the screen."""
+    NEAREST = "nearest"
+    """Follow only the viewer closest to the camera (largest face)."""
+
+
 class VideoConfig(_Section):
     source: VideoSourceKind = VideoSourceKind.RTSP
     rtsp_url: str | None = None
@@ -88,6 +97,7 @@ class BehaviorConfig(_Section):
     resume_after_s: float = Field(default=0.5, gt=0)
     on_face_lost: FaceLostAction = FaceLostAction.PAUSE
     face_lost_after_s: float = Field(default=3.0, gt=0)
+    multiple_viewers: MultipleViewers = MultipleViewers.ANY_AWAY
 
 
 class AppleTvConfig(_Section):

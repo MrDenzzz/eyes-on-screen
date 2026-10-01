@@ -43,9 +43,14 @@ behavior:
   pause_after_s: 1.5
   # Resume once the viewer has been looking at the screen this long.
   resume_after_s: 0.5
-  # What to do when the target face is gone from the ROI (viewer left): pause | ignore
+  # What to do when no viewer is left in the ROI: pause | ignore
   on_face_lost: pause
   face_lost_after_s: 3.0
+  # Several people on the sofa:
+  #   any_away - pause as soon as any of them looks away
+  #   all_away - keep playing while at least one of them looks at the screen
+  #   nearest  - follow only the viewer closest to the camera
+  multiple_viewers: any_away
 
 apple_tv:
   # Device identifier (keep the quotes). Empty until the device has been found.
