@@ -119,10 +119,14 @@ def _pose_line(face: FaceObservation | None, pose: PoseConfig) -> str:
     if face.pose is None:
         return f"face found (score {face.score:.2f}), no landmarks: turned away or covered"
     p = face.pose
-    return (
+    line = (
         f"yaw {p.yaw:+.0f} pitch {p.pitch:+.0f} roll {p.roll:+.0f}"
         f"   offset {p.yaw - pose.yaw_center_deg:+.0f} / {p.pitch - pose.pitch_center_deg:+.0f}"
     )
+    if face.eyes is not None:
+        eyes = face.eyes
+        line += f"   eyes down {eyes.look_down:.2f} up {eyes.look_up:.2f} closed {eyes.closed:.2f}"
+    return line
 
 
 def _stream_line(stats: SourceStats, analysed_fps: float, analysis_ms: float) -> str:

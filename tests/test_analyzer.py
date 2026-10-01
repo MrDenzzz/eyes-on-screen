@@ -1,12 +1,20 @@
 import numpy as np
 import pytest
 
-from eyes_on_screen.vision.analyzer import Box, FaceAnalyzer, FaceObservation
+from eyes_on_screen.vision.analyzer import (
+    Box,
+    EyeState,
+    FaceAnalyzer,
+    FaceEstimate,
+    FaceObservation,
+)
 from eyes_on_screen.vision.head_pose import HeadPose
 
 WIDTH, HEIGHT = 200, 100
 ROI = (0.25, 0.5, 0.75, 1.0)  # x 50..150, y 50..100 in pixels
 SOME_POSE = HeadPose(1, 2, 3)
+SOME_EYES = EyeState(look_down=0.6, look_up=0.0, closed=0.1)
+SOME_ESTIMATE = FaceEstimate(SOME_POSE, SOME_EYES)
 
 
 class FakeDetector:
@@ -20,13 +28,13 @@ class FakeDetector:
 
 
 class FakePose:
-    def __init__(self, pose: HeadPose | None = SOME_POSE) -> None:
-        self.pose = pose
+    def __init__(self, estimate: FaceEstimate | None = SOME_ESTIMATE) -> None:
+        self.estimate = estimate
         self.crops: list[np.ndarray] = []
 
-    def __call__(self, crop: np.ndarray) -> HeadPose | None:
+    def __call__(self, crop: np.ndarray) -> FaceEstimate | None:
         self.crops.append(crop)
-        return self.pose
+        return self.estimate
 
 
 def make_analyzer(detector, pose=None, max_faces=3, crop_size=32) -> FaceAnalyzer:
@@ -55,6 +63,7 @@ def test_boxes_are_mapped_back_to_normalized_frame_coordinates():
     assert face.box == pytest.approx((0.30, 0.55, 0.40, 0.65))
     assert face.score == 0.9
     assert face.pose == SOME_POSE
+    assert face.eyes == SOME_EYES
 
 
 def test_only_the_most_confident_faces_are_analysed():
@@ -88,7 +97,24 @@ def test_missing_landmarks_are_reported_as_no_pose():
     [face] = make_analyzer(detector, FakePose(None)).analyze(frame())
 
     assert face.pose is None
+    assert face.eyes is None
     assert face.crop is not None
+
+
+def test_eye_state_averages_both_eyes():
+    from eyes_on_screen.vision.backends import eye_state
+
+    scores = {
+        "eyeLookDownLeft": 0.6,
+        "eyeLookDownRight": 0.4,
+        "eyeLookUpLeft": 0.1,
+        "eyeLookUpRight": 0.3,
+        "eyeBlinkLeft": 0.0,
+        "eyeBlinkRight": 0.2,
+    }
+
+    assert eye_state(scores) == pytest.approx(EyeState(look_down=0.5, look_up=0.2, closed=0.1))
+    assert eye_state({"eyeLookDownLeft": 0.6}) is None
 
 
 def test_observation_geometry():

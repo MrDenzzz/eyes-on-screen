@@ -32,12 +32,30 @@ class Box:
 
 
 @dataclass(frozen=True, slots=True)
+class EyeState:
+    """Face Landmarker blendshape scores (0..1), averaged over both eyes."""
+
+    look_down: float
+    look_up: float
+    closed: float
+
+
+@dataclass(frozen=True, slots=True)
+class FaceEstimate:
+    """What the landmarker read from one face crop."""
+
+    pose: HeadPose
+    eyes: EyeState | None = None
+
+
+@dataclass(frozen=True, slots=True)
 class FaceObservation:
     box: Roi
     """Normalized (x1, y1, x2, y2) in the full frame."""
     score: float
     pose: HeadPose | None
     """None when the face was found but no landmarks were: usually strongly turned or covered."""
+    eyes: EyeState | None = None
     crop: np.ndarray | None = field(default=None, repr=False, compare=False)
     """The zoomed face image the pose was estimated on, for debug views."""
 
@@ -54,8 +72,8 @@ class FaceObservation:
 
 FaceDetector = Callable[[np.ndarray], list[tuple[Box, float]]]
 """BGR image -> [(face box, confidence)]."""
-PoseEstimator = Callable[[np.ndarray], HeadPose | None]
-"""BGR face crop -> head pose, or None when no face landmarks were found."""
+FaceEstimator = Callable[[np.ndarray], FaceEstimate | None]
+"""BGR face crop -> head pose and eyes, or None when no face landmarks were found."""
 
 
 class FaceAnalyzer:
@@ -63,7 +81,7 @@ class FaceAnalyzer:
         self,
         roi: Roi,
         detect_faces: FaceDetector,
-        estimate_pose: PoseEstimator,
+        estimate_face: FaceEstimator,
         *,
         max_faces: int,
         crop_scale: float = 1.6,
@@ -74,7 +92,7 @@ class FaceAnalyzer:
         them there."""
         self._roi = roi
         self._detect_faces = detect_faces
-        self._estimate_pose = estimate_pose
+        self._estimate_face = estimate_face
         self._max_faces = max_faces
         self._crop_scale = crop_scale
         self._crop_size = crop_size
@@ -88,6 +106,7 @@ class FaceAnalyzer:
         observations = []
         for box, score in found[: self._max_faces]:
             crop = self._face_crop(area, box)
+            estimate = self._estimate_face(crop)
             observations.append(
                 FaceObservation(
                     box=(
@@ -97,7 +116,8 @@ class FaceAnalyzer:
                         (y0 + box.y + box.h) / height,
                     ),
                     score=score,
-                    pose=self._estimate_pose(crop),
+                    pose=estimate.pose if estimate else None,
+                    eyes=estimate.eyes if estimate else None,
                     crop=crop,
                 )
             )

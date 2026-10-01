@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from pathlib import Path
 
 import cv2
@@ -11,8 +12,8 @@ from mediapipe.tasks.python import vision
 from mediapipe.tasks.python.core.base_options import BaseOptions
 
 from eyes_on_screen.config import DetectionConfig
-from eyes_on_screen.vision.analyzer import Box, FaceAnalyzer, Roi
-from eyes_on_screen.vision.head_pose import HeadPose, head_pose_from_matrix
+from eyes_on_screen.vision.analyzer import Box, EyeState, FaceAnalyzer, FaceEstimate, Roi
+from eyes_on_screen.vision.head_pose import head_pose_from_matrix
 from eyes_on_screen.vision.models import FACE_DETECTOR, FACE_LANDMARKER, require_models
 
 _NMS_THRESHOLD = 0.3
@@ -43,7 +44,7 @@ class YuNetDetector:
         return [(Box(*map(float, row[:4])), float(row[_YUNET_SCORE_COLUMN])) for row in faces]
 
 
-class LandmarkerPoseEstimator:
+class LandmarkerFaceEstimator:
     def __init__(self, model_path: Path) -> None:
         options = vision.FaceLandmarkerOptions(
             base_options=BaseOptions(model_asset_path=str(model_path)),
@@ -52,18 +53,36 @@ class LandmarkerPoseEstimator:
             min_face_detection_confidence=_LANDMARKER_CONFIDENCE,
             min_face_presence_confidence=_LANDMARKER_CONFIDENCE,
             output_facial_transformation_matrixes=True,
+            # Eye blendshapes: looking at a phone often moves the eyes, not the head.
+            output_face_blendshapes=True,
         )
         self._landmarker = vision.FaceLandmarker.create_from_options(options)
 
-    def __call__(self, crop: np.ndarray) -> HeadPose | None:
+    def __call__(self, crop: np.ndarray) -> FaceEstimate | None:
         rgb = cv2.cvtColor(crop, cv2.COLOR_BGR2RGB)
         result = self._landmarker.detect(mp.Image(image_format=mp.ImageFormat.SRGB, data=rgb))
         if not result.facial_transformation_matrixes:
             return None
-        return head_pose_from_matrix(result.facial_transformation_matrixes[0])
+        blendshapes = result.face_blendshapes[0] if result.face_blendshapes else []
+        return FaceEstimate(
+            pose=head_pose_from_matrix(result.facial_transformation_matrixes[0]),
+            eyes=eye_state({c.category_name: c.score for c in blendshapes}),
+        )
 
     def close(self) -> None:
         self._landmarker.close()
+
+
+def eye_state(blendshapes: Mapping[str, float]) -> EyeState | None:
+    """Both eyes' look-down, look-up and blink scores, averaged; None if missing."""
+    try:
+        return EyeState(
+            look_down=(blendshapes["eyeLookDownLeft"] + blendshapes["eyeLookDownRight"]) / 2,
+            look_up=(blendshapes["eyeLookUpLeft"] + blendshapes["eyeLookUpRight"]) / 2,
+            closed=(blendshapes["eyeBlinkLeft"] + blendshapes["eyeBlinkRight"]) / 2,
+        )
+    except KeyError:
+        return None
 
 
 def create_face_analyzer(config: DetectionConfig, roi: Roi) -> FaceAnalyzer:
@@ -72,6 +91,6 @@ def create_face_analyzer(config: DetectionConfig, roi: Roi) -> FaceAnalyzer:
     return FaceAnalyzer(
         roi,
         YuNetDetector(config.models_dir / FACE_DETECTOR.filename, config.min_detection_confidence),
-        LandmarkerPoseEstimator(config.models_dir / FACE_LANDMARKER.filename),
+        LandmarkerFaceEstimator(config.models_dir / FACE_LANDMARKER.filename),
         max_faces=config.max_faces,
     )

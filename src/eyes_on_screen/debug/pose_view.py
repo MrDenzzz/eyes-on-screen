@@ -135,7 +135,19 @@ class _Recorder:
         self._file = path.open("w", newline="", encoding="utf-8", buffering=1)
         self._writer = csv.writer(self._file)
         self._writer.writerow(
-            ["t", "faces", "unconfirmed", "score", "yaw", "pitch", "roll", "attention"]
+            [
+                "t",
+                "faces",
+                "unconfirmed",
+                "score",
+                "yaw",
+                "pitch",
+                "roll",
+                "eye_down",
+                "eye_up",
+                "eye_closed",
+                "attention",
+            ]
         )
         self._t0 = time.monotonic()
         log.info("Recording poses to %s", path)
@@ -148,6 +160,7 @@ class _Recorder:
         attention: Attention,
     ) -> None:
         pose = target.pose if target else None
+        eyes = target.eyes if target else None
         self._writer.writerow(
             [
                 f"{now - self._t0:.2f}",
@@ -157,6 +170,9 @@ class _Recorder:
                 f"{pose.yaw:.1f}" if pose else "",
                 f"{pose.pitch:.1f}" if pose else "",
                 f"{pose.roll:.1f}" if pose else "",
+                f"{eyes.look_down:.3f}" if eyes else "",
+                f"{eyes.look_up:.3f}" if eyes else "",
+                f"{eyes.closed:.3f}" if eyes else "",
                 attention.value,
             ]
         )
