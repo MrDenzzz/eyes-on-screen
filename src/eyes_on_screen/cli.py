@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import asyncio
 import contextlib
 import sys
 from collections.abc import Callable, Sequence
@@ -24,6 +25,7 @@ EXIT_OK = 0
 EXIT_CONFIG_ERROR = 2
 EXIT_MODEL_ERROR = 3
 EXIT_GO2RTC_ERROR = 4
+EXIT_APPLE_TV_ERROR = 5
 
 
 class _ConfigDumper(yaml.SafeDumper):
@@ -126,6 +128,43 @@ def cmd_pose(config: AppConfig, args: argparse.Namespace) -> int:
     return _with_camera(config, body)
 
 
+def cmd_atv(config: AppConfig, args: argparse.Namespace) -> int:
+    """Apple TV commands: scan, pair, status, play, pause."""
+    # Imported here: pyatv pulls in aiohttp, zeroconf and cryptography.
+    from eyes_on_screen.appletv import commands
+    from eyes_on_screen.appletv.controller import AppleTvError
+    from eyes_on_screen.appletv.pairing import PairingError
+
+    credentials = config.apple_tv.credentials_file
+    explicit_id = getattr(args, "atv_id", None)  # `scan` has no --id
+    identifier = explicit_id or config.apple_tv.identifier
+    action = args.atv_command
+
+    if action == "scan":
+        coroutine = commands.scan_command(credentials)
+    elif action == "pair":
+        coroutine = commands.pair_command(credentials, explicit_id)
+    elif identifier is None:
+        print(
+            "error: no Apple TV selected: set apple_tv.identifier in config.yaml "
+            "or pass --id (see `eos atv scan`)",
+            file=sys.stderr,
+        )
+        return EXIT_APPLE_TV_ERROR
+    elif action == "status":
+        coroutine = commands.status_command(identifier, credentials, watch=args.watch)
+    else:
+        coroutine = commands.remote_command(identifier, credentials, action)
+
+    try:
+        return asyncio.run(coroutine)
+    except (AppleTvError, PairingError) as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return EXIT_APPLE_TV_ERROR
+    except KeyboardInterrupt:
+        return EXIT_OK
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="eos",
@@ -157,6 +196,25 @@ def build_parser() -> argparse.ArgumentParser:
         "--record", type=Path, metavar="CSV", help="write the target's pose per frame to a CSV"
     )
     pose.set_defaults(handler=cmd_pose)
+
+    atv = commands.add_parser("atv", help="Apple TV: scan, pair, status, play, pause")
+    atv.set_defaults(handler=cmd_atv)
+    atv_commands = atv.add_subparsers(dest="atv_command", required=True, metavar="<action>")
+    atv_commands.add_parser("scan", help="list Apple TVs and other AirPlay devices nearby")
+    for name, help_text in (
+        ("pair", "pair with the Apple TV (a PIN appears on the TV)"),
+        ("status", "show what the Apple TV is playing"),
+        ("play", "resume playback"),
+        ("pause", "pause playback"),
+    ):
+        action = atv_commands.add_parser(name, help=help_text)
+        action.add_argument(
+            "--id", dest="atv_id", help="device identifier (default: apple_tv.identifier)"
+        )
+        if name == "status":
+            action.add_argument(
+                "--watch", action="store_true", help="keep printing changes (Ctrl+C to stop)"
+            )
     return parser
 
 

@@ -24,6 +24,19 @@ A local webcam works too (`video.source: webcam`). Check the stream with:
 uv run eos preview
 ```
 
+## Apple TV
+
+```shell
+uv run eos atv scan              # find the Apple TV and its identifier
+uv run eos atv pair              # PINs appear on the TV; credentials go to data/pyatv.conf
+uv run eos atv status --watch    # live player state from push updates
+uv run eos atv pause | play
+```
+
+Since tvOS 15 the media remote protocol is tunnelled over AirPlay, so AirPlay (plus
+Companion) is what gets paired. The identifier goes into `apple_tv.identifier`; the
+device is found by it on every connect, so its IP may change.
+
 ## Head pose
 
 ```shell
