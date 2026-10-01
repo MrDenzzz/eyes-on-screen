@@ -38,6 +38,7 @@ class EyeState:
     look_down: float
     look_up: float
     closed: float
+    squint: float
 
 
 @dataclass(frozen=True, slots=True)

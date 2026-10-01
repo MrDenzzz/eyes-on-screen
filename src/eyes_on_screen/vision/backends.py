@@ -74,12 +74,13 @@ class LandmarkerFaceEstimator:
 
 
 def eye_state(blendshapes: Mapping[str, float]) -> EyeState | None:
-    """Both eyes' look-down, look-up and blink scores, averaged; None if missing."""
+    """Both eyes' look-down, look-up, blink and squint scores, averaged; None if missing."""
     try:
         return EyeState(
             look_down=(blendshapes["eyeLookDownLeft"] + blendshapes["eyeLookDownRight"]) / 2,
             look_up=(blendshapes["eyeLookUpLeft"] + blendshapes["eyeLookUpRight"]) / 2,
             closed=(blendshapes["eyeBlinkLeft"] + blendshapes["eyeBlinkRight"]) / 2,
+            squint=(blendshapes["eyeSquintLeft"] + blendshapes["eyeSquintRight"]) / 2,
         )
     except KeyError:
         return None

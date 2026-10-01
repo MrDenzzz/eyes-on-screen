@@ -32,6 +32,10 @@ CALIBRATION_DELAY_S = 10.0
 CALIBRATION_DURATION_S = 2.0
 _KEY_ESC = 27
 _STATUS_REFRESH_S = 0.5
+# While recording, these keys label what the viewer is doing, to tune thresholds
+# against it offline.
+_LABEL_KEYS = {ord("1"): "screen", ord("2"): "phone", ord("3"): "elsewhere", ord("0"): ""}
+_LABEL_HINT = "1 screen  2 phone  3 elsewhere  0 none"
 
 
 def run_pose_view(
@@ -45,7 +49,8 @@ def run_pose_view(
     """Analyse frames at `process_fps` and show the result until q/Esc or window close.
 
     `c` starts a calibration: after a countdown the viewer's pose, while looking at the
-    screen, becomes the new centre. `record` writes every analysed frame to a CSV file.
+    screen, becomes the new centre. `record` writes every analysed frame to a CSV file,
+    labelled with what the keys 1-3 say the viewer is doing.
     """
     period = 1.0 / process_fps
     analysis_times: deque[float] = deque(maxlen=20)
@@ -55,6 +60,7 @@ def run_pose_view(
     view: View | None = None
     calibration: CalibrationSession | None = None
     recorder = _Recorder(record) if record else None
+    label = ""
 
     cv2.namedWindow(WINDOW, cv2.WINDOW_NORMAL)
     try:
@@ -75,7 +81,7 @@ def run_pose_view(
                     if calibration is not None and target is not None:
                         calibration.add(now, target.pose)
                     if recorder is not None:
-                        recorder.write(now, faces, target, attention)
+                        recorder.write(now, faces, target, attention, label)
                     states = [attention if face is target else None for face in faces]
                     view = View(frame.image, faces, states, attention, target, elapsed_ms)
 
@@ -84,13 +90,21 @@ def run_pose_view(
                 calibration = None
 
             if view is not None and (view.fresh or now - last_render > _STATUS_REFRESH_S):
-                footer: Line = (
+                footer: list[Line] = [
                     (_calibration_text(calibration, now), HIGHLIGHT, 0.6)
                     if calibration
                     else ("c: calibrate (10 s countdown)   q: quit", MUTED, 0.45)
-                )
+                ]
+                if recorder is not None:
+                    footer.append(
+                        (
+                            f"recording, label: {label or '-'}   ({_LABEL_HINT})",
+                            HIGHLIGHT if label else MUTED,
+                            0.5,
+                        )
+                    )
                 fps = rate(analysis_times, now)
-                cv2.imshow(WINDOW, render(view, pose, roi, source.stats(), fps, [footer]))
+                cv2.imshow(WINDOW, render(view, pose, roi, source.stats(), fps, footer))
                 view.fresh = False
                 last_render = now
 
@@ -103,6 +117,9 @@ def run_pose_view(
                     "Calibration starts in %.0fs: sit down and look at the screen",
                     CALIBRATION_DELAY_S,
                 )
+            if recorder is not None and key in _LABEL_KEYS:
+                label = _LABEL_KEYS[key]
+                log.info("Label: %s", label or "none")
             if cv2.getWindowProperty(WINDOW, cv2.WND_PROP_VISIBLE) < 1:
                 break
     finally:
@@ -139,7 +156,9 @@ class _Recorder:
                 "eye_down",
                 "eye_up",
                 "eye_closed",
+                "eye_squint",
                 "attention",
+                "label",
             ]
         )
         self._t0 = time.monotonic()
@@ -151,6 +170,7 @@ class _Recorder:
         faces: list[FaceObservation],
         target: FaceObservation | None,
         attention: Attention,
+        label: str,
     ) -> None:
         pose = target.pose if target else None
         eyes = target.eyes if target else None
@@ -166,7 +186,9 @@ class _Recorder:
                 f"{eyes.look_down:.3f}" if eyes else "",
                 f"{eyes.look_up:.3f}" if eyes else "",
                 f"{eyes.closed:.3f}" if eyes else "",
+                f"{eyes.squint:.3f}" if eyes else "",
                 attention.value,
+                label,
             ]
         )
 

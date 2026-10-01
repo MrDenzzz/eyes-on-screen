@@ -13,7 +13,7 @@ from eyes_on_screen.vision.head_pose import HeadPose
 WIDTH, HEIGHT = 200, 100
 ROI = (0.25, 0.5, 0.75, 1.0)  # x 50..150, y 50..100 in pixels
 SOME_POSE = HeadPose(1, 2, 3)
-SOME_EYES = EyeState(look_down=0.6, look_up=0.0, closed=0.1)
+SOME_EYES = EyeState(look_down=0.6, look_up=0.0, closed=0.1, squint=0.2)
 SOME_ESTIMATE = FaceEstimate(SOME_POSE, SOME_EYES)
 
 
@@ -111,9 +111,13 @@ def test_eye_state_averages_both_eyes():
         "eyeLookUpRight": 0.3,
         "eyeBlinkLeft": 0.0,
         "eyeBlinkRight": 0.2,
+        "eyeSquintLeft": 0.5,
+        "eyeSquintRight": 0.3,
     }
 
-    assert eye_state(scores) == pytest.approx(EyeState(look_down=0.5, look_up=0.2, closed=0.1))
+    assert eye_state(scores) == pytest.approx(
+        EyeState(look_down=0.5, look_up=0.2, closed=0.1, squint=0.4)
+    )
     assert eye_state({"eyeLookDownLeft": 0.6}) is None
 
 

@@ -226,7 +226,11 @@ def build_parser() -> argparse.ArgumentParser:
         "pose", help="live head-pose view and calibration (c: calibrate, q: quit)"
     )
     pose.add_argument(
-        "--record", type=Path, metavar="CSV", help="write the target's pose per frame to a CSV"
+        "--record",
+        type=Path,
+        metavar="CSV",
+        help="write the target's pose and eye scores per frame to a CSV; "
+        "keys 1-3 label what the viewer does (1 screen, 2 phone, 3 elsewhere, 0 none)",
     )
     pose.set_defaults(handler=cmd_pose)
 
