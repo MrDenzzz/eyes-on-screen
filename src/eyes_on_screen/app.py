@@ -9,7 +9,7 @@ import time
 from collections import deque
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
-from typing import Any
+from typing import Literal
 
 import cv2
 import numpy as np
@@ -22,7 +22,7 @@ from eyes_on_screen.attention.calibration import (
     calibrate_center,
 )
 from eyes_on_screen.attention.classifier import Attention, classify
-from eyes_on_screen.attention.state_machine import Command, Decision, PlaybackStateMachine
+from eyes_on_screen.attention.state_machine import Decision, PlaybackCommand, PlaybackStateMachine
 from eyes_on_screen.attention.viewers import RoomAttention, ViewerFilter, room_attention
 from eyes_on_screen.config import AppConfig
 from eyes_on_screen.debug.overlay import HIGHLIGHT, MUTED, TEXT, Line, View, rate, render
@@ -31,6 +31,24 @@ from eyes_on_screen.settings import Changes, SettingsError, apply_changes, save_
 from eyes_on_screen.video.source import Frame, VideoSource
 from eyes_on_screen.vision.analyzer import FaceAnalyzer, FaceObservation
 from eyes_on_screen.vision.target import select_target
+from eyes_on_screen.web.messages import (
+    AnalysisInfo,
+    AutomationCommand,
+    AutomationInfo,
+    CalibrateCommand,
+    CalibrationInfo,
+    EventInfo,
+    FaceInfo,
+    FrameHeader,
+    MachineInfo,
+    PageCommand,
+    PlayerInfo,
+    RoomInfo,
+    SetCommand,
+    SettingsInfo,
+    StatusMessage,
+    StreamInfo,
+)
 from eyes_on_screen.web.protocol import encode_frame
 from eyes_on_screen.web.server import WebServer
 
@@ -42,6 +60,7 @@ WINDOW = "eyes-on-screen"
 WEB_CALIBRATION_DELAY_S = 3.0
 CALIBRATION_DURATION_S = 2.0
 _FRAME_WAIT_S = 0.5
+EventKind = Literal["pause", "resume", "player", "calibration", "other"]
 _KEY_ESC = 27
 
 
@@ -180,7 +199,7 @@ class App:
             events.info("would %s: %s", decision.command.value, decision.reason)
             return
         try:
-            if decision.command is Command.PAUSE:
+            if decision.command is PlaybackCommand.PAUSE:
                 await self._player.pause()
             else:
                 await self._player.play()
@@ -188,7 +207,7 @@ class App:
             # The state machine resends once the command times out unconfirmed.
             events.warning("%s failed: %s", decision.command.value, exc)
             return
-        verb = "paused" if decision.command is Command.PAUSE else "resumed"
+        verb = "paused" if decision.command is PlaybackCommand.PAUSE else "resumed"
         events.info("%s: %s", verb, decision.reason)
 
     def _on_player(self, state: PlayerState | None) -> None:
@@ -230,41 +249,30 @@ class App:
 
     # Web UI
 
-    async def _on_web_command(self, message: dict[str, Any]) -> dict[str, Any]:
-        command = message.get("cmd")
-        if command == "set":
-            changes = message.get("changes")
-            if not isinstance(changes, dict) or not all(
-                isinstance(values, dict) for values in changes.values()
-            ):
-                return {"ok": False, "error": "changes must be {section: {key: value}}"}
+    async def _on_web_command(self, command: PageCommand) -> str | None:
+        """Run a validated command from the web UI; returns an error message or None."""
+        if isinstance(command, SetCommand):
+            changes = command.changes.as_changes()
             try:
                 self._change_settings(changes)
             except (SettingsError, OSError) as exc:
-                return {"ok": False, "error": str(exc)}
+                return str(exc)
             summary = ", ".join(f"{s}.{k}" for s, values in changes.items() for k in values)
             log.info("Settings changed from the web UI: %s", summary)
-            return {"ok": True}
-        if command == "calibrate":
+        elif isinstance(command, CalibrateCommand):
             self._calibration = CalibrationSession(
                 time.monotonic(), WEB_CALIBRATION_DELAY_S, CALIBRATION_DURATION_S
             )
-            return {"ok": True}
-        if command == "automation":
-            self._automation = bool(message.get("enabled"))
-            events.info("automation %s from the web UI", "on" if self._automation else "off")
-            return {"ok": True}
-        if command == "player":
-            action = message.get("action")
-            if action not in ("play", "pause"):
-                return {"ok": False, "error": f"unknown player action {action!r}"}
+        elif isinstance(command, AutomationCommand):
+            self._automation = command.enabled
+            events.info("automation %s from the web UI", "on" if command.enabled else "off")
+        else:
             try:
-                await (self._player.play() if action == "play" else self._player.pause())
+                await (self._player.play() if command.action == "play" else self._player.pause())
             except AppleTvError as exc:
-                return {"ok": False, "error": str(exc)}
-            events.info("%s pressed in the web UI", action)
-            return {"ok": True}
-        return {"ok": False, "error": f"unknown command {command!r}"}
+                return str(exc)
+            events.info("%s pressed in the web UI", command.action)
+        return None
 
     async def _publish_frame(
         self,
@@ -274,16 +282,16 @@ class App:
         focus: FaceObservation | None,
     ) -> None:
         assert self._web is not None
-        header = {
-            "seq": frame.seq,
+        header = FrameHeader(
+            seq=frame.seq,
             # Wall-clock milliseconds, the same clock as the events' timestamps.
-            "ts": round((time.time() - (time.monotonic() - frame.timestamp)) * 1000),
-            "attention": self._room.attention.value,
-            "faces": [
-                _face_payload(face, state, face is focus)
+            ts=round((time.time() - (time.monotonic() - frame.timestamp)) * 1000),
+            attention=self._room.attention,
+            faces=[
+                _face_info(face, state, face is focus)
                 for face, state in zip(faces, states, strict=True)
             ],
-        }
+        ).model_dump(mode="json")
         web = self._config.web
         packet = await asyncio.get_running_loop().run_in_executor(
             self._worker,
@@ -293,59 +301,56 @@ class App:
         )
         self._web.publish_frame(packet)
 
-    def _status(self) -> dict[str, Any]:
+    def _status(self) -> StatusMessage:
         now = time.monotonic()
         stats = self._source.stats()
         machine = self._machine.status(now)
         player = self._player.state
         calibration = self._calibration
         config = self._config
-        return {
-            "stream": {
-                "connected": stats.connected,
-                "width": stats.width,
-                "height": stats.height,
-                "fps": round(stats.fps, 1),
-                "error": stats.last_error,
-            },
-            "analysis": {
-                "fps": round(rate(self._analysis_times, now), 1),
-                "ms": round(self._analysis_ms, 1),
-            },
-            "player": {
-                "connected": self._player.connected,
-                "name": self._player.name,
-                "playback": player.playback.value if player else None,
-                "app": player.app if player else None,
-                "title": player.title if player else None,
-            },
-            "room": {
-                "attention": self._room.attention.value,
-                "viewers": self._room.viewers,
-                "looking": self._room.looking,
-            },
-            "machine": {
-                "streak_s": round(machine.streak_s, 2),
-                "paused_by_us": machine.paused_by_us,
-                "armed": machine.armed,
-                "pending": machine.pending.value if machine.pending else None,
-            },
-            "automation": {"enabled": self._automation, "dry_run": self._dry_run},
-            "calibration": None
+        return StatusMessage(
+            stream=StreamInfo(
+                connected=stats.connected,
+                width=stats.width,
+                height=stats.height,
+                fps=round(stats.fps, 1),
+                error=stats.last_error,
+            ),
+            analysis=AnalysisInfo(
+                fps=round(rate(self._analysis_times, now), 1), ms=round(self._analysis_ms, 1)
+            ),
+            player=PlayerInfo(
+                connected=self._player.connected,
+                name=self._player.name,
+                playback=player.playback if player else None,
+                app=player.app if player else None,
+                title=player.title if player else None,
+            ),
+            room=RoomInfo(
+                attention=self._room.attention,
+                viewers=self._room.viewers,
+                looking=self._room.looking,
+            ),
+            machine=MachineInfo(
+                streak_s=round(machine.streak_s, 2),
+                paused_by_us=machine.paused_by_us,
+                armed=machine.armed,
+                pending=machine.pending,
+            ),
+            automation=AutomationInfo(enabled=self._automation, dry_run=self._dry_run),
+            calibration=None
             if calibration is None
-            else {
-                "phase": "countdown" if calibration.counting_down(now) else "collecting",
-                "remaining_s": round(calibration.remaining_s(now), 2),
-                "phase_s": calibration.delay_s
+            else CalibrationInfo(
+                phase="countdown" if calibration.counting_down(now) else "collecting",
+                remaining_s=round(calibration.remaining_s(now), 2),
+                phase_s=calibration.delay_s
                 if calibration.counting_down(now)
                 else calibration.duration_s,
-            },
-            "settings": {
-                "roi": list(config.target.roi),
-                "pose": config.pose.model_dump(mode="json"),
-                "behavior": config.behavior.model_dump(mode="json"),
-            },
-        }
+            ),
+            settings=SettingsInfo(
+                roi=config.target.roi, pose=config.pose, behavior=config.behavior
+            ),
+        )
 
     # Debug window
 
@@ -390,18 +395,23 @@ class App:
         return cv2.getWindowProperty(WINDOW, cv2.WND_PROP_VISIBLE) >= 1
 
 
-def _face_payload(face: FaceObservation, state: Attention | None, focus: bool) -> dict[str, Any]:
-    return {
-        "box": [round(value, 4) for value in face.box],
-        "state": state.value if state is not None else "ignored",
-        "yaw": round(face.pose.yaw, 1) if face.pose else None,
-        "pitch": round(face.pose.pitch, 1) if face.pose else None,
-        "eyes_down": round(face.eyes.look_down, 3) if face.eyes else None,
-        "focus": focus,
-    }
+def _face_info(face: FaceObservation, state: Attention | None, focus: bool) -> FaceInfo:
+    return FaceInfo(
+        box=(
+            round(face.box[0], 4),
+            round(face.box[1], 4),
+            round(face.box[2], 4),
+            round(face.box[3], 4),
+        ),
+        state=state.value if state is not None else "ignored",
+        yaw=round(face.pose.yaw, 1) if face.pose else None,
+        pitch=round(face.pose.pitch, 1) if face.pose else None,
+        eyes_down=round(face.eyes.look_down, 3) if face.eyes else None,
+        focus=focus,
+    )
 
 
-_EVENT_KINDS = (
+_EVENT_KINDS: tuple[tuple[str, EventKind], ...] = (
     ("paused", "pause"),
     ("would pause", "pause"),
     ("resumed", "resume"),
@@ -421,13 +431,15 @@ class _EventForwarder(logging.Handler):
 
     def emit(self, record: logging.LogRecord) -> None:
         text = record.getMessage()
-        kind = next((k for prefix, k in _EVENT_KINDS if text.startswith(prefix)), "other")
-        event = {
-            "ts": round(record.created * 1000),
-            "time": time.strftime("%H:%M:%S", time.localtime(record.created)),
-            "level": "warning" if record.levelno >= logging.WARNING else "info",
-            "kind": kind,
-            "text": text,
-        }
+        kind: EventKind = next(
+            (k for prefix, k in _EVENT_KINDS if text.startswith(prefix)), "other"
+        )
+        event = EventInfo(
+            ts=round(record.created * 1000),
+            time=time.strftime("%H:%M:%S", time.localtime(record.created)),
+            level="warning" if record.levelno >= logging.WARNING else "info",
+            kind=kind,
+            text=text,
+        )
         with contextlib.suppress(RuntimeError):  # loop already closed at shutdown
             self._loop.call_soon_threadsafe(self._web.publish_event, event)

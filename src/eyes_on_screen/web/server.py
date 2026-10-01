@@ -1,4 +1,4 @@
-"""aiohttp server for the web UI: the page, its static files, and one WebSocket per tab."""
+"""aiohttp server for the web UI: the built page, and one WebSocket per open tab."""
 
 from __future__ import annotations
 
@@ -12,26 +12,39 @@ import secrets
 from collections import deque
 from collections.abc import Awaitable, Callable
 from pathlib import Path
-from typing import Any
 from urllib.parse import urlsplit
 
 from aiohttp import WSMsgType, web
+from pydantic import ValidationError
 
 from eyes_on_screen.config import WebConfig
+from eyes_on_screen.web.messages import (
+    COMMAND_ADAPTER,
+    EventInfo,
+    EventsMessage,
+    PageCommand,
+    ReplyMessage,
+    StatusMessage,
+)
 
 log = logging.getLogger(__name__)
 
+# The React app (frontend/) builds into this folder: index.html plus assets/.
 STATIC_DIR = Path(__file__).parent / "static"
 EVENT_HISTORY = 100
 _SESSION_COOKIE = "eos_session"
 _REALM = 'Basic realm="eyes-on-screen", charset="UTF-8"'
+_NOT_BUILT = (
+    "The web UI is not built yet: run `npm --prefix frontend ci` "
+    "and `npm --prefix frontend run build`."
+)
 
-CommandHandler = Callable[[dict[str, Any]], Awaitable[dict[str, Any]]]
-"""Handles one command from a page; returns the reply fields (at least "ok")."""
+CommandHandler = Callable[[PageCommand], Awaitable[str | None]]
+"""Runs one validated command from a page; returns an error message, or None on success."""
 
 
 class _Client:
-    def __init__(self, ws: web.WebSocketResponse, history: list[dict[str, Any]]) -> None:
+    def __init__(self, ws: web.WebSocketResponse, history: list[EventInfo]) -> None:
         self.ws = ws
         self.wake = asyncio.Event()
         self.outbox: list[str] = []
@@ -56,7 +69,7 @@ class WebServer:
         self._frame_seq = 0
         self._status = ""
         self._status_seq = 0
-        self._events: deque[dict[str, Any]] = deque(maxlen=EVENT_HISTORY)
+        self._events: deque[EventInfo] = deque(maxlen=EVENT_HISTORY)
         self._runner: web.AppRunner | None = None
 
     @property
@@ -73,7 +86,9 @@ class WebServer:
         app = web.Application(middlewares=[self._auth])
         app.router.add_get("/", self._index)
         app.router.add_get("/ws", self._websocket)
-        app.router.add_static("/static/", STATIC_DIR)
+        assets = STATIC_DIR / "assets"
+        if assets.is_dir():
+            app.router.add_static("/assets/", assets)
         return app
 
     async def start(self) -> None:
@@ -93,12 +108,12 @@ class WebServer:
         self._frame_seq += 1
         self._wake_all()
 
-    def publish_status(self, status: dict[str, Any]) -> None:
-        self._status = json.dumps({"type": "status", **status}, separators=(",", ":"))
+    def publish_status(self, status: StatusMessage) -> None:
+        self._status = status.model_dump_json()
         self._status_seq += 1
         self._wake_all()
 
-    def publish_event(self, event: dict[str, Any]) -> None:
+    def publish_event(self, event: EventInfo) -> None:
         self._events.append(event)
         for client in self._clients:
             client.events.append(event)
@@ -111,7 +126,11 @@ class WebServer:
     # HTTP
 
     async def _index(self, request: web.Request) -> web.StreamResponse:
-        return web.FileResponse(STATIC_DIR / "index.html", headers={"Cache-Control": "no-cache"})
+        index = STATIC_DIR / "index.html"
+        if not index.is_file():
+            return web.Response(status=503, text=_NOT_BUILT)
+        # Asset names carry content hashes; only the page itself must never be cached.
+        return web.FileResponse(index, headers={"Cache-Control": "no-cache"})
 
     @web.middleware
     async def _auth(self, request: web.Request, handler) -> web.StreamResponse:
@@ -164,20 +183,31 @@ class WebServer:
 
     async def _handle(self, client: _Client, data: str) -> None:
         try:
-            message = json.loads(data)
-            if not isinstance(message, dict):
-                raise ValueError("expected a JSON object")
+            raw = json.loads(data)
         except ValueError as exc:
-            reply: dict[str, Any] = {"ok": False, "error": f"bad message: {exc}"}
-            message = {}
+            reply = ReplyMessage(id=None, ok=False, error=f"bad JSON: {exc}")
         else:
-            try:
-                reply = await self._on_command(message)
-            except Exception as exc:  # a broken command must not kill the page's socket
-                log.exception("Web command failed: %s", message)
-                reply = {"ok": False, "error": str(exc)}
-        client.outbox.append(json.dumps({"type": "reply", "id": message.get("id"), **reply}))
+            request_id = raw.get("id") if isinstance(raw, dict) else None
+            reply = await self._run_command(
+                raw, request_id if isinstance(request_id, int) else None
+            )
+        client.outbox.append(reply.model_dump_json())
         client.wake.set()
+
+    async def _run_command(self, raw: object, request_id: int | None) -> ReplyMessage:
+        try:
+            command = COMMAND_ADAPTER.validate_python(raw)
+        except ValidationError as exc:
+            details = "; ".join(
+                f"{'.'.join(str(p) for p in e['loc'])}: {e['msg']}" for e in exc.errors()
+            )
+            return ReplyMessage(id=request_id, ok=False, error=f"bad command: {details}")
+        try:
+            error = await self._on_command(command)
+        except Exception as exc:  # a broken command must not kill the page's socket
+            log.exception("Web command failed: %s", command)
+            error = str(exc)
+        return ReplyMessage(id=request_id, ok=error is None, error=error)
 
     async def _send_loop(self, client: _Client) -> None:
         ws = client.ws
@@ -189,7 +219,7 @@ class WebServer:
                     await ws.send_str(client.outbox.pop(0))
                 if client.events:
                     events, client.events = client.events, []
-                    await ws.send_str(json.dumps({"type": "events", "events": events}))
+                    await ws.send_str(EventsMessage(events=events).model_dump_json())
                 if client.status_seq != self._status_seq and self._status:
                     client.status_seq = self._status_seq
                     await ws.send_str(self._status)

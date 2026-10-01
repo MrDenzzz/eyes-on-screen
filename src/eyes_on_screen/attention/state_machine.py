@@ -26,14 +26,14 @@ MAX_OBSERVATION_GAP_S = 2.0
 _DELIBERATE_START_FROM = {Playback.PAUSED, Playback.STOPPED, Playback.IDLE}
 
 
-class Command(StrEnum):
+class PlaybackCommand(StrEnum):
     PAUSE = "pause"
     RESUME = "resume"
 
 
 @dataclass(frozen=True, slots=True)
 class Decision:
-    command: Command
+    command: PlaybackCommand
     reason: str
 
 
@@ -48,7 +48,7 @@ class MachineStatus:
     player_connected: bool
     paused_by_us: bool
     armed: bool
-    pending: Command | None
+    pending: PlaybackCommand | None
 
 
 class PlaybackStateMachine:
@@ -73,7 +73,7 @@ class PlaybackStateMachine:
         self._player_connected = False
         self._paused_by_us = False
         self._armed = True
-        self._pending: tuple[Command, float] | None = None
+        self._pending: tuple[PlaybackCommand, float] | None = None
 
     @property
     def behavior(self) -> BehaviorConfig:
@@ -111,7 +111,7 @@ class PlaybackStateMachine:
         pending = self._pending[0] if self._pending else None
 
         if state.playback is Playback.PAUSED:
-            if pending is Command.PAUSE:
+            if pending is PlaybackCommand.PAUSE:
                 self._paused_by_us = True
                 self._pending = None
             elif previous is not Playback.PAUSED:
@@ -119,7 +119,7 @@ class PlaybackStateMachine:
                     events.info("paused by someone else: will not resume it")
                 self._paused_by_us = False
         elif state.playback is Playback.PLAYING:
-            if pending is Command.RESUME:
+            if pending is PlaybackCommand.RESUME:
                 self._pending = None
             elif previous in _DELIBERATE_START_FROM:
                 events.info("playback started by someone else: waiting for a viewer to look")
@@ -144,23 +144,25 @@ class PlaybackStateMachine:
         behavior = self._behavior
         if self._playback is Playback.PLAYING and self._armed:
             if attention is Attention.AWAY and streak >= behavior.pause_after_s:
-                return self._send(Command.PAUSE, f"looked away for {streak:.1f}s", now)
+                return self._send(PlaybackCommand.PAUSE, f"looked away for {streak:.1f}s", now)
             if (
                 attention is Attention.ABSENT
                 and behavior.on_face_lost is FaceLostAction.PAUSE
                 and streak >= behavior.face_lost_after_s
             ):
-                return self._send(Command.PAUSE, f"no viewer for {streak:.1f}s", now)
+                return self._send(PlaybackCommand.PAUSE, f"no viewer for {streak:.1f}s", now)
         if (
             self._playback is Playback.PAUSED
             and self._paused_by_us
             and attention is Attention.LOOKING
             and streak >= behavior.resume_after_s
         ):
-            return self._send(Command.RESUME, f"looking at the screen for {streak:.1f}s", now)
+            return self._send(
+                PlaybackCommand.RESUME, f"looking at the screen for {streak:.1f}s", now
+            )
         return None
 
-    def _send(self, command: Command, reason: str, now: float) -> Decision:
+    def _send(self, command: PlaybackCommand, reason: str, now: float) -> Decision:
         self._pending = (command, now)
         return Decision(command, reason)
 
