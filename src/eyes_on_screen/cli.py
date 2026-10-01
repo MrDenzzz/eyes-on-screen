@@ -128,6 +128,31 @@ def cmd_pose(config: AppConfig, args: argparse.Namespace) -> int:
     return _with_camera(config, body)
 
 
+def cmd_run(config: AppConfig, args: argparse.Namespace) -> int:
+    """The app itself: pause the Apple TV when viewers look away, resume when they look back."""
+    from eyes_on_screen.app import App
+    from eyes_on_screen.vision.backends import create_face_analyzer
+
+    if config.apple_tv.identifier is None:
+        print(
+            "error: apple_tv.identifier is not set (find it with `eos atv scan`, "
+            "then pair with `eos atv pair`)",
+            file=sys.stderr,
+        )
+        return EXIT_APPLE_TV_ERROR
+    try:
+        analyzer = create_face_analyzer(config.detection, config.target.roi)
+    except ModelError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return EXIT_MODEL_ERROR
+
+    def body(source: VideoSource) -> None:
+        app = App(config, source, analyzer, dry_run=args.dry_run, debug=args.debug)
+        asyncio.run(app.run())
+
+    return _with_camera(config, body)
+
+
 def cmd_atv(config: AppConfig, args: argparse.Namespace) -> int:
     """Apple TV commands: scan, pair, status, play, pause."""
     # Imported here: pyatv pulls in aiohttp, zeroconf and cryptography.
@@ -180,6 +205,14 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("-v", "--verbose", action="store_true", help="enable debug logging")
 
     commands = parser.add_subparsers(dest="command", required=True, metavar="<command>")
+    run = commands.add_parser(
+        "run", help="pause the Apple TV when viewers look away, resume when they look back"
+    )
+    run.add_argument("--debug", action="store_true", help="show the live debug window")
+    run.add_argument(
+        "--dry-run", action="store_true", help="only log what would be paused or resumed"
+    )
+    run.set_defaults(handler=cmd_run)
     check = commands.add_parser(
         "config-check", help="validate the config and print the effective values"
     )

@@ -15,6 +15,27 @@ uv run eos config-check
 uv run pytest
 ```
 
+## Run
+
+```shell
+uv run eos run             # headless; Ctrl+C to stop
+uv run eos run --debug     # live window: faces, attention, timers, player state
+uv run eos run --dry-run   # only log what would be paused / resumed
+```
+
+Pause and resume events with their reasons go to `logs/events.log`.
+
+How it decides:
+
+- Pause while playing once the viewers looked away for `behavior.pause_after_s`
+  (or nobody is there for `face_lost_after_s`, if `on_face_lost: pause`).
+- Resume only a pause it made, once the viewers look back for `resume_after_s`.
+  A pause from the remote is never undone.
+- After someone starts playback themselves, it waits until a viewer is seen looking
+  at the screen before pausing again (listening from the kitchen stays possible).
+- Several viewers: `behavior.multiple_viewers` = `any_away` (default), `all_away`
+  or `nearest`.
+
 ## Camera
 
 The Xiaomi C400 is read over RTSP re-published by go2rtc: see [docs/go2rtc.md](docs/go2rtc.md).
