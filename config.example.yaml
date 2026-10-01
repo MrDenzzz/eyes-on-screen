@@ -14,16 +14,18 @@ video:
   reconnect_delay_s: 2.0
 
 detection:
-  # MediaPipe Face Landmarker model bundle.
-  model_path: models/face_landmarker.task
-  # Several people may be on the sofa; the target viewer is picked by target.roi.
+  # Face detector and landmarker models; fetch them with `eos download-models`.
+  models_dir: models
+  # At most this many faces are analysed per frame (the most confident ones).
   max_faces: 3
-  min_detection_confidence: 0.5
+  # Face detector score threshold (0..1).
+  min_detection_confidence: 0.6
 
 target:
-  # Part of the frame where the target viewer sits: [x1, y1, x2, y2] as fractions
-  # of the frame size, (0, 0) is the top-left corner. Example: right half.
-  roi: [0.5, 0.0, 1.0, 1.0]
+  # Part of the frame where viewers sit: [x1, y1, x2, y2] as fractions of the frame
+  # size, (0, 0) is the top-left corner. Faces are searched only inside it, so keep
+  # some margin above the seats for heads. Example: a sofa across the middle.
+  roi: [0.12, 0.3, 0.75, 0.65]
 
 pose:
   # Head orientation in degrees that counts as "looking at the screen".

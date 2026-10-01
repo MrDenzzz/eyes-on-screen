@@ -40,18 +40,18 @@ def test_relative_paths_are_resolved_against_config_folder(tmp_path):
     config = load_config(write_config(tmp_path, MINIMAL))
 
     base = tmp_path.resolve()
-    assert config.detection.model_path == base / "models" / "face_landmarker.task"
+    assert config.detection.models_dir == base / "models"
     assert config.apple_tv.credentials_file == base / "data" / "pyatv.conf"
     assert config.logging.events_file == base / "logs" / "events.log"
 
 
 def test_absolute_paths_are_kept(tmp_path):
-    model = (tmp_path / "elsewhere" / "model.task").resolve()
-    text = MINIMAL + f"detection: {{model_path: '{model.as_posix()}'}}\n"
+    models = (tmp_path / "elsewhere" / "models").resolve()
+    text = MINIMAL + f"detection: {{models_dir: '{models.as_posix()}'}}\n"
 
     config = load_config(write_config(tmp_path, text))
 
-    assert config.detection.model_path == model
+    assert config.detection.models_dir == models
 
 
 def test_events_file_can_be_disabled(tmp_path):

@@ -23,3 +23,16 @@ A local webcam works too (`video.source: webcam`). Check the stream with:
 ```shell
 uv run eos preview
 ```
+
+## Head pose
+
+```shell
+uv run eos download-models   # YuNet + MediaPipe Face Landmarker, checksums verified
+uv run eos pose              # live view; c = calibrate, q = quit
+uv run eos pose --record logs/poses.csv
+```
+
+Faces across a room are only ~50 px wide in a 2560x1440 frame, too small for MediaPipe's
+own face detector. So YuNet finds faces inside `target.roi` at full resolution, and each
+face is cropped, upscaled and passed to Face Landmarker, whose transformation matrix gives
+yaw and pitch relative to the line from the face to the camera.

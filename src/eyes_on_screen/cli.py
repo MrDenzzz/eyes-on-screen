@@ -11,11 +11,13 @@ import yaml
 
 from eyes_on_screen.config import DEFAULT_CONFIG_PATH, AppConfig, ConfigError, load_config
 from eyes_on_screen.logging_setup import setup_logging
+from eyes_on_screen.vision.models import ALL_MODELS, ModelError, download_model, missing_models
 
 Handler = Callable[[AppConfig, argparse.Namespace], int]
 
 EXIT_OK = 0
 EXIT_CONFIG_ERROR = 2
+EXIT_MODEL_ERROR = 3
 
 
 class _ConfigDumper(yaml.SafeDumper):
@@ -35,8 +37,10 @@ def cmd_config_check(config: AppConfig, args: argparse.Namespace) -> int:
     print(dump, end="")
 
     notes = []
-    if not config.detection.model_path.is_file():
-        notes.append(f"detection.model_path does not exist yet: {config.detection.model_path}")
+    missing = missing_models(config.detection.models_dir)
+    if missing:
+        names = ", ".join(model.filename for model in missing)
+        notes.append(f"models not downloaded yet: {names} (run `eos download-models`)")
     if config.apple_tv.identifier is None:
         notes.append("apple_tv.identifier is not set")
     if notes:
@@ -56,6 +60,53 @@ def cmd_preview(config: AppConfig, args: argparse.Namespace) -> int:
     source.start()
     try:
         run_preview(source)
+    except KeyboardInterrupt:
+        pass
+    finally:
+        source.stop()
+    return EXIT_OK
+
+
+def cmd_download_models(config: AppConfig, args: argparse.Namespace) -> int:
+    """Fetch the face models into detection.models_dir, verifying checksums."""
+    models_dir = config.detection.models_dir
+    for model in ALL_MODELS:
+        print(f"{model.description} ({model.filename}): ", end="", flush=True)
+        try:
+            downloaded = download_model(model, models_dir, force=args.force)
+        except ModelError as exc:
+            print("failed")
+            print(f"error: {exc}", file=sys.stderr)
+            return EXIT_MODEL_ERROR
+        print("downloaded" if downloaded else "already present")
+    print(f"Models are in {models_dir}")
+    return EXIT_OK
+
+
+def cmd_pose(config: AppConfig, args: argparse.Namespace) -> int:
+    """Live face and head-pose analysis in a debug window, with calibration."""
+    # Imported here: MediaPipe and OpenCV are slow to import.
+    from eyes_on_screen.debug.pose_view import run_pose_view
+    from eyes_on_screen.video.capture import create_source
+    from eyes_on_screen.vision.backends import create_face_analyzer
+
+    try:
+        analyzer = create_face_analyzer(config.detection, config.target.roi)
+    except ModelError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return EXIT_MODEL_ERROR
+
+    source = create_source(config.video)
+    source.start()
+    try:
+        run_pose_view(
+            source,
+            analyzer,
+            config.pose,
+            config.target.roi,
+            config.video.process_fps,
+            record=args.record,
+        )
     except KeyboardInterrupt:
         pass
     finally:
@@ -84,6 +135,16 @@ def build_parser() -> argparse.ArgumentParser:
     check.set_defaults(handler=cmd_config_check)
     preview = commands.add_parser("preview", help="show the raw video stream (q/Esc to quit)")
     preview.set_defaults(handler=cmd_preview)
+    download = commands.add_parser("download-models", help="download the face models")
+    download.add_argument("--force", action="store_true", help="download even if present")
+    download.set_defaults(handler=cmd_download_models)
+    pose = commands.add_parser(
+        "pose", help="live head-pose view and calibration (c: calibrate, q: quit)"
+    )
+    pose.add_argument(
+        "--record", type=Path, metavar="CSV", help="write the target's pose per frame to a CSV"
+    )
+    pose.set_defaults(handler=cmd_pose)
     return parser
 
 

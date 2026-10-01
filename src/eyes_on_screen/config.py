@@ -53,9 +53,9 @@ class VideoConfig(_Section):
 
 
 class DetectionConfig(_Section):
-    model_path: Path = Path("models/face_landmarker.task")
+    models_dir: Path = Path("models")
     max_faces: int = Field(default=3, ge=1, le=10)
-    min_detection_confidence: float = Field(default=0.5, ge=0, le=1)
+    min_detection_confidence: float = Field(default=0.6, ge=0, le=1)
 
 
 class TargetConfig(_Section):
@@ -130,7 +130,7 @@ class AppConfig(_Section):
         return self.model_copy(
             update={
                 "detection": self.detection.model_copy(
-                    update={"model_path": anchor(self.detection.model_path)}
+                    update={"models_dir": anchor(self.detection.models_dir)}
                 ),
                 "apple_tv": self.apple_tv.model_copy(
                     update={"credentials_file": anchor(self.apple_tv.credentials_file)}
