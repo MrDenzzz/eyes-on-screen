@@ -25,6 +25,10 @@ OPEN_TIMEOUT_S = 10.0
 # times out and then hands out frames still buffered in the decoder, stamped as new.
 # A frame arriving after such a gap is stale, so the session is reopened instead.
 READ_TIMEOUT_S = 3.0
+# A live HEVC stream joined between key frames decodes to flat grey until the next key
+# frame (up to 3 s on the C400). Such frames are skipped after every (re)connect, but
+# for no longer than this, so a genuinely grey scene can never block the stream.
+WARMUP_MAX_S = 8.0
 # Frames older than this mean the stream stalled, so the measured fps drops to 0.
 _STALL_AFTER_S = 1.0
 _FPS_WINDOW = 30
@@ -142,6 +146,8 @@ class CaptureSource:
     def _read_until_failure(self, capture: Capture) -> str:
         """Publish frames until reading fails; return the reason."""
         previous: float | None = None
+        warmup_until: float | None = time.monotonic() + WARMUP_MAX_S
+        skipped = 0
         while not self._stopping.is_set():
             ok, image = capture.read()
             now = time.monotonic()
@@ -150,6 +156,14 @@ class CaptureSource:
             if previous is not None and now - previous > READ_TIMEOUT_S:
                 return f"stream stalled for {now - previous:.1f}s"
             previous = now
+
+            if warmup_until is not None:
+                if now < warmup_until and _looks_undecoded(image):
+                    skipped += 1
+                    continue
+                warmup_until = None
+                if skipped:
+                    log.debug("Skipped %d undecoded frames before the first key frame", skipped)
 
             with self._cond:
                 if not self._connected:
@@ -238,6 +252,15 @@ def redact_url(url: str) -> str:
     userinfo, _, hostport = parts.netloc.rpartition("@")
     user = userinfo.split(":", 1)[0]
     return urlunsplit(parts._replace(netloc=f"{user}:***@{hostport}"))
+
+
+def _looks_undecoded(image: np.ndarray) -> bool:
+    """True for the flat mid-grey picture a decoder emits while reference frames are missing."""
+    sample = image[::8, ::8].astype(np.int16)
+    colourless = (sample.max(axis=2) - sample.min(axis=2)) < 6
+    mid_grey = np.abs(sample.mean(axis=2) - 128) < 10
+    # Measured on the C400: ~0.98 before the first key frame, ~0.03 right after it.
+    return bool(np.mean(colourless & mid_grey) > 0.9)
 
 
 def _fourcc_to_str(value: float) -> str | None:

@@ -18,6 +18,7 @@ class FakeCapture:
     """Delivers `frames` frames (None = endless), then reports a failed read.
 
     With `stall_at=n`, the read of the n-th frame blocks for `stall_s` first.
+    The first `grey_frames` frames are flat mid-grey, like HEVC before its first key frame.
     """
 
     def __init__(
@@ -26,11 +27,13 @@ class FakeCapture:
         fourcc: float = HEVC,
         stall_at: int | None = None,
         stall_s: float = 0.0,
+        grey_frames: int = 0,
     ) -> None:
         self.remaining = frames
         self.fourcc = fourcc
         self.stall_at = stall_at
         self.stall_s = stall_s
+        self.grey_frames = grey_frames
         self.reads = 0
         self.released = False
 
@@ -41,7 +44,8 @@ class FakeCapture:
             if self.remaining <= 0:
                 return False, None
             self.remaining -= 1
-        return True, np.zeros(FRAME_SHAPE, np.uint8)
+        value = 128 if self.reads <= self.grey_frames else 0
+        return True, np.full(FRAME_SHAPE, value, np.uint8)
 
     def get(self, prop_id: int) -> float:
         return self.fourcc if prop_id == cv2.CAP_PROP_FOURCC else 0.0
@@ -130,6 +134,34 @@ def test_frame_after_a_stall_is_dropped_and_the_stream_reopened(make_source, mon
     assert stats.frames == 2  # the 3rd frame came after the stall: stale, never published
     assert stats.reconnects == 1
     assert "stream stalled" in caplog.text
+
+
+def test_undecoded_grey_frames_after_connect_are_skipped(make_source):
+    source = make_source(ScriptedOpener(FakeCapture(frames=None, grey_frames=5)))
+
+    first = source.wait_for_frame(newer_than=-1, timeout=1)
+
+    assert first is not None
+    assert first.seq == 1  # the grey frames were never published or counted
+    assert first.image.max() == 0
+
+
+def test_grey_scene_is_published_once_the_warmup_limit_passes(make_source, monkeypatch):
+    monkeypatch.setattr(capture_module, "WARMUP_MAX_S", 0.05)
+    source = make_source(ScriptedOpener(FakeCapture(frames=None, grey_frames=10_000)))
+
+    frame = source.wait_for_frame(newer_than=-1, timeout=1)
+
+    assert frame is not None
+    assert frame.image.max() == 128
+
+
+def test_textured_grayscale_frame_is_not_mistaken_for_undecoded():
+    ir_like = np.repeat(np.tile(np.linspace(60, 200, 64, dtype=np.uint8), (36, 1))[..., None], 3, 2)
+    flat_grey = np.full((36, 64, 3), 128, np.uint8)
+
+    assert not capture_module._looks_undecoded(ir_like)
+    assert capture_module._looks_undecoded(flat_grey)
 
 
 def test_retries_until_the_camera_comes_online(make_source):
