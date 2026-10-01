@@ -1,4 +1,9 @@
-"""`eos run`: camera -> faces -> room attention -> state machine -> Apple TV, plus the web UI."""
+"""`eos run`: camera -> faces -> room attention -> state machine -> player.
+
+The app knows nothing about the web UI. web/bridge.py watches it through `listeners`
+and its read-only properties, and drives it through the operations at the bottom:
+settings, calibration, automation, player buttons and guided recordings.
+"""
 
 from __future__ import annotations
 
@@ -8,63 +13,64 @@ import logging
 import time
 from collections import deque
 from concurrent.futures import ThreadPoolExecutor
+from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
-from typing import Literal
+from typing import Literal, Protocol
 
-import cv2
-import numpy as np
-
-from eyes_on_screen.appletv.controller import AppleTvController
-from eyes_on_screen.appletv.state import PlayerState
+from eyes_on_screen.appletv.state import AppleTvError, Player, PlayerState
 from eyes_on_screen.attention.calibration import (
     CalibrationError,
     CalibrationSession,
     calibrate_center,
 )
 from eyes_on_screen.attention.classifier import Attention, classify
-from eyes_on_screen.attention.state_machine import Decision, PlaybackCommand, PlaybackStateMachine
+from eyes_on_screen.attention.state_machine import (
+    Decision,
+    MachineStatus,
+    PlaybackCommand,
+    PlaybackStateMachine,
+)
 from eyes_on_screen.attention.viewers import RoomAttention, ViewerFilter, room_attention
 from eyes_on_screen.config import AppConfig
-from eyes_on_screen.debug.overlay import HIGHLIGHT, MUTED, TEXT, Line, View, rate, render
 from eyes_on_screen.logging_setup import EVENTS_LOGGER
-from eyes_on_screen.recording import GAZE_STEPS, GuidedRecording, RecordingError
+from eyes_on_screen.recording import GuidedRecording, RecordingError
 from eyes_on_screen.settings import Changes, SettingsError, apply_changes, save_changes
-from eyes_on_screen.video.source import Frame, VideoSource
+from eyes_on_screen.video.source import Frame, SourceStats, VideoSource
 from eyes_on_screen.vision.analyzer import FaceAnalyzer, FaceObservation
 from eyes_on_screen.vision.target import select_target
-from eyes_on_screen.web.messages import (
-    AnalysisInfo,
-    AutomationInfo,
-    CalibrationInfo,
-    EventInfo,
-    FaceInfo,
-    FrameHeader,
-    MachineInfo,
-    PlayerInfo,
-    RecordingInfo,
-    RecordingProgress,
-    RecordingResult,
-    RecordingStepInfo,
-    RoomInfo,
-    SettingsChanges,
-    SettingsInfo,
-    StatusMessage,
-    StreamInfo,
-)
-from eyes_on_screen.web.protocol import encode_frame
-from eyes_on_screen.web.server import WebServer
 
 log = logging.getLogger(__name__)
 events = logging.getLogger(EVENTS_LOGGER)
 
-WINDOW = "eyes-on-screen"
-# From the web UI the viewer already holds the device: a short countdown is enough.
-WEB_CALIBRATION_DELAY_S = 3.0
+# The viewer holds the phone or laptop when calibrating: a short countdown is enough.
+CALIBRATION_DELAY_S = 3.0
 CALIBRATION_DURATION_S = 2.0
 _FRAME_WAIT_S = 0.5
-EventKind = Literal["pause", "resume", "player", "calibration", "other"]
-_KEY_ESC = 27
+_RATE_WINDOW = 20
+
+
+@dataclass(frozen=True, slots=True)
+class Scene:
+    """One analysed frame, as the app understood it."""
+
+    frame: Frame
+    faces: list[FaceObservation]
+    states: list[Attention | None]
+    """Per face: its attention, or None for face-like decor that is not a viewer."""
+    focus: FaceObservation | None
+    """The viewer the pose readouts follow (largest confirmed face)."""
+    room: RoomAttention
+
+
+class AppListener(Protocol):
+    async def scene(self, scene: Scene) -> None:
+        """Called for every analysed frame."""
+        ...
+
+    def tick(self) -> None:
+        """Called on every turn of the analysis loop, with or without a new frame."""
+        ...
 
 
 class App:
@@ -74,74 +80,53 @@ class App:
         config_path: Path,
         source: VideoSource,
         analyzer: FaceAnalyzer,
+        player: Player | None = None,
         *,
         dry_run: bool = False,
-        debug: bool = False,
     ) -> None:
-        identifier = config.apple_tv.identifier
-        if identifier is None:
-            raise ValueError("apple_tv.identifier is required")
+        """`player` None: watch only, nothing is ever paused (no Apple TV set up yet)."""
         self._config = config
         self._config_path = config_path
         self._source = source
         self._analyzer = analyzer
-        self._dry_run = dry_run
-        self._debug = debug
-        self._automation = True
+        self._player = player
+        self.dry_run = dry_run
+        self.automation = True
+        self.listeners: list[AppListener] = []
+        self.analysis_ms = 0.0
         self._machine = PlaybackStateMachine(config.behavior)
         self._viewers = ViewerFilter()
-        self._player = AppleTvController(
-            identifier, config.apple_tv.credentials_file, on_state=self._on_player
-        )
-        self._web = WebServer(config.web, self) if config.web.enabled else None
+        self._room = RoomAttention(Attention.ABSENT, viewers=0, looking=0)
+        self._analysis_times: deque[float] = deque(maxlen=_RATE_WINDOW)
+        self._calibration: CalibrationSession | None = None
+        self._recording: GuidedRecording | None = None
         # MediaPipe and OpenCV work stays on one dedicated thread, off the event loop
         # that serves the Apple TV connection and the web UI.
         self._worker = ThreadPoolExecutor(max_workers=1, thread_name_prefix="analysis")
-        self._room = RoomAttention(Attention.ABSENT, viewers=0, looking=0)
-        self._analysis_times: deque[float] = deque(maxlen=20)
-        self._analysis_ms = 0.0
-        self._calibration: CalibrationSession | None = None
-        self._recording: GuidedRecording | None = None
+        if player is not None:
+            player.on_state = self._on_player
 
     async def run(self) -> None:
-        """Run until cancelled (Ctrl+C) or, in debug mode, until the window is closed."""
-        events.info("started%s", " (dry run: commands are only logged)" if self._dry_run else "")
-        forwarder = await self._start_web()
-        player_task = asyncio.create_task(self._player.run_forever(), name="apple-tv")
-        if self._debug:
-            cv2.namedWindow(WINDOW, cv2.WINDOW_NORMAL)
+        """Run until cancelled (Ctrl+C)."""
+        events.info("started%s", " (dry run: commands are only logged)" if self.dry_run else "")
+        player_task = (
+            asyncio.create_task(self._player.run_forever(), name="player")
+            if self._player is not None
+            else None
+        )
         try:
             await self._analysis_loop()
         finally:
-            player_task.cancel()
-            with contextlib.suppress(asyncio.CancelledError):
-                await player_task
-            await self._player.close()
+            if player_task is not None and self._player is not None:
+                player_task.cancel()
+                with contextlib.suppress(asyncio.CancelledError):
+                    await player_task
+                await self._player.close()
             self._worker.shutdown(wait=True)
-            if self._debug:
-                cv2.destroyWindow(WINDOW)
             self.finish_recording()
             events.info("stopped")
-            if self._web is not None:
-                events.removeHandler(forwarder)
-                await self._web.stop()
 
-    async def _start_web(self) -> logging.Handler | None:
-        if self._web is None:
-            return None
-        try:
-            await self._web.start()
-        except OSError as exc:
-            log.error("Web UI disabled: cannot listen on %s: %s", self._web.url, exc)
-            self._web = None
-            return None
-        forwarder = _EventForwarder(self._web, asyncio.get_running_loop())
-        events.addHandler(forwarder)
-        if lan_url := self._web.lan_url:
-            log.info("Web UI: %s (from other devices: %s)", self._web.url, lan_url)
-        else:
-            log.info("Web UI: %s", self._web.url)
-        return forwarder
+    # The pipeline
 
     async def _analysis_loop(self) -> None:
         loop = asyncio.get_running_loop()
@@ -163,20 +148,18 @@ class App:
                 faces = await loop.run_in_executor(
                     self._worker, self._analyzer.analyze, frame.image
                 )
-                self._analysis_ms = (time.perf_counter() - started) * 1000
+                self.analysis_ms = (time.perf_counter() - started) * 1000
                 self._analysis_times.append(time.monotonic())
                 await self._observe(frame, faces)
             self._tick_recording(time.monotonic())
-            if self._web is not None:
-                self._web.publish_status(self._status())
-            if self._debug and not self._poll_window():
-                return
+            for listener in self.listeners:
+                listener.tick()
 
     async def _observe(self, frame: Frame, faces: list[FaceObservation]) -> None:
         now = frame.timestamp
-        pose = self._config.pose
+        config = self._config
         viewers = self._viewers.viewers(faces, now)
-        room = room_attention(viewers, pose, self._config.behavior.multiple_viewers)
+        room = room_attention(viewers, config.pose, config.behavior.multiple_viewers)
         if room.attention is not self._room.attention:
             log.debug(
                 "Room: %s (%d viewers, %d looking)", room.attention, room.viewers, room.looking
@@ -189,24 +172,25 @@ class App:
             if self._calibration.finished(now):
                 self._finish_calibration()
         if self._recording is not None:
-            self._recording.add(now, faces, focus, classify(focus, pose))
+            self._recording.add(now, faces, focus, classify(focus, config.pose))
 
-        if self._automation:
+        if self.automation:
             decision = self._machine.observe(room.attention, now)
             if decision is not None:
                 await self._execute(decision)
 
-        states: list[Attention | None] = [
-            classify(face, pose) if face in viewers else None for face in faces
-        ]
-        if self._web is not None and self._web.has_clients:
-            await self._publish_frame(frame, faces, states, focus)
-        if self._debug:
-            view = View(frame.image, faces, states, room.attention, focus, self._analysis_ms)
-            cv2.imshow(WINDOW, self._render(view))
+        scene = Scene(
+            frame=frame,
+            faces=faces,
+            states=[classify(face, config.pose) if face in viewers else None for face in faces],
+            focus=focus,
+            room=room,
+        )
+        for listener in self.listeners:
+            await listener.scene(scene)
 
     async def _execute(self, decision: Decision) -> None:
-        if self._dry_run:
+        if self.dry_run or self._player is None:
             self._machine.skip()
             events.info("would %s: %s", decision.command.value, decision.reason)
             return
@@ -226,22 +210,113 @@ class App:
         events.info("player: %s", state or "disconnected")
         self._machine.player_changed(state, time.monotonic())
 
-    # Settings and calibration
+    # What the UI shows
 
-    def _change_settings(self, changes: Changes) -> None:
-        """Validate, persist to config.yaml, and apply to the running app."""
+    @property
+    def config(self) -> AppConfig:
+        return self._config
+
+    @property
+    def player(self) -> Player | None:
+        return self._player
+
+    @property
+    def room(self) -> RoomAttention:
+        return self._room
+
+    @property
+    def calibration(self) -> CalibrationSession | None:
+        return self._calibration
+
+    @property
+    def recording(self) -> GuidedRecording | None:
+        return self._recording
+
+    def source_stats(self) -> SourceStats:
+        return self._source.stats()
+
+    def machine_status(self, now: float) -> MachineStatus:
+        return self._machine.status(now)
+
+    def analysis_fps(self, now: float) -> float:
+        times = self._analysis_times
+        if len(times) < 2 or now - times[-1] > 1.0:
+            return 0.0
+        span = times[-1] - times[0]
+        return (len(times) - 1) / span if span > 0 else 0.0
+
+    def shown_path(self, path: Path) -> str:
+        """`path` relative to the config folder, where logs and recordings usually are."""
+        try:
+            return path.relative_to(self._config_path.resolve().parent).as_posix()
+        except ValueError:
+            return str(path)
+
+    # Operations
+
+    def change_settings(self, changes: Changes) -> AppConfig:
+        """Validate, save to config.yaml and apply live; raises SettingsError."""
         updated = apply_changes(self._config, changes)
-        save_changes(self._config_path, updated, changes)
+        try:
+            save_changes(self._config_path, updated, changes)
+        except OSError as exc:
+            raise SettingsError(f"cannot save {self._config_path}: {exc}") from exc
         self._config = updated
         self._analyzer.roi = updated.target.roi
         self._machine.behavior = updated.behavior
+        return updated
+
+    def start_calibration(self) -> None:
+        """After a countdown, the viewer's pose becomes the screen direction."""
+        self._calibration = CalibrationSession(
+            time.monotonic(), CALIBRATION_DELAY_S, CALIBRATION_DURATION_S
+        )
+
+    def set_automation(self, enabled: bool) -> None:
+        if enabled != self.automation:
+            self.automation = enabled
+            events.info("automation %s", "on" if enabled else "off")
+
+    async def press(self, action: Literal["play", "pause"]) -> None:
+        """Raises AppleTvError when the player is unreachable or not set up."""
+        if self._player is None:
+            raise AppleTvError("no Apple TV is set up: run `eos atv scan` and `eos atv pair`")
+        await (self._player.play() if action == "play" else self._player.pause())
+        events.info("%s pressed", action)
+
+    def start_recording_step(self, index: int) -> None:
+        """Start (or redo) a step of the guided recording; raises RecordingError."""
+        now = time.monotonic()
+        recording = self._recording or GuidedRecording(
+            self._config.logging.recordings_dir
+            / datetime.now().strftime("gaze-%Y-%m-%d_%H-%M-%S.csv")
+        )
+        try:
+            recording.start(index, now)
+        except OSError as exc:
+            raise RecordingError(f"cannot write {recording.path}: {exc}") from exc
+        if self._recording is None:
+            self._recording = recording
+            events.info("recording to %s", self.shown_path(recording.path))
+
+    def cancel_recording_step(self) -> None:
+        if self._recording is not None:
+            self._recording.cancel()
+
+    def finish_recording(self) -> None:
+        recording, self._recording = self._recording, None
+        if recording is not None:
+            recording.close()
+            events.info("recording saved: %s", self.shown_path(recording.path))
+
+    # Calibration and recording internals
 
     def _finish_calibration(self) -> None:
         assert self._calibration is not None
         poses, self._calibration = self._calibration.poses, None
         try:
             centre = calibrate_center(poses, self._config.pose)
-            self._change_settings(
+            self.change_settings(
                 {
                     "pose": {
                         "yaw_center_deg": centre.yaw_center_deg,
@@ -249,7 +324,7 @@ class App:
                     }
                 }
             )
-        except (CalibrationError, SettingsError, OSError) as exc:
+        except (CalibrationError, SettingsError) as exc:
             events.warning("calibration failed: %s", exc)
             return
         events.info(
@@ -258,8 +333,6 @@ class App:
             centre.pitch_center_deg,
             len(poses),
         )
-
-    # Guided recording
 
     def _tick_recording(self, now: float) -> None:
         if self._recording is None:
@@ -275,263 +348,3 @@ class App:
                 result.frames,
                 share * 100,
             )
-
-    def _recording_info(self, now: float) -> RecordingInfo | None:
-        recording = self._recording
-        if recording is None:
-            return None
-        progress = recording.progress(now)
-        return RecordingInfo(
-            file=self._shown_path(recording.path),
-            current=None
-            if progress is None
-            else RecordingProgress.model_validate(progress, from_attributes=True),
-            done=[
-                RecordingResult.model_validate(result, from_attributes=True)
-                for result in recording.results
-            ],
-            last=recording.last,
-        )
-
-    def _shown_path(self, path: Path) -> str:
-        """`path` relative to the config folder, where the logs usually are."""
-        try:
-            return path.relative_to(self._config_path.resolve().parent).as_posix()
-        except ValueError:
-            return str(path)
-
-    # Web UI
-
-    # Controls for the web UI (see web/server.py)
-
-    def status(self) -> StatusMessage:
-        return self._status()
-
-    def change_settings(self, changes: SettingsChanges) -> SettingsInfo:
-        """Validate, persist to config.yaml and apply live; raises SettingsError."""
-        as_dict = changes.as_changes()
-        try:
-            self._change_settings(as_dict)
-        except OSError as exc:
-            raise SettingsError(f"cannot save {self._config_path}: {exc}") from exc
-        summary = ", ".join(f"{s}.{k}" for s, values in as_dict.items() for k in values)
-        log.info("Settings changed from the web UI: %s", summary)
-        return self._settings_info()
-
-    def start_calibration(self) -> None:
-        self._calibration = CalibrationSession(
-            time.monotonic(), WEB_CALIBRATION_DELAY_S, CALIBRATION_DURATION_S
-        )
-
-    def set_automation(self, enabled: bool) -> AutomationInfo:
-        if enabled != self._automation:
-            self._automation = enabled
-            events.info("automation %s from the web UI", "on" if enabled else "off")
-        return AutomationInfo(enabled=self._automation, dry_run=self._dry_run)
-
-    async def press(self, action: Literal["play", "pause"]) -> None:
-        await (self._player.play() if action == "play" else self._player.pause())
-        events.info("%s pressed in the web UI", action)
-
-    def recording_steps(self) -> list[RecordingStepInfo]:
-        return [RecordingStepInfo.model_validate(s, from_attributes=True) for s in GAZE_STEPS]
-
-    def start_recording_step(self, index: int) -> RecordingInfo:
-        now = time.monotonic()
-        recording = self._recording or GuidedRecording(
-            self._config.logging.recordings_dir
-            / datetime.now().strftime("gaze-%Y-%m-%d_%H-%M-%S.csv")
-        )
-        try:
-            recording.start(index, now)
-        except OSError as exc:
-            raise RecordingError(f"cannot write {recording.path}: {exc}") from exc
-        if self._recording is None:
-            self._recording = recording
-            events.info("recording to %s", self._shown_path(recording.path))
-        info = self._recording_info(now)
-        assert info is not None
-        return info
-
-    def cancel_recording_step(self) -> None:
-        if self._recording is not None:
-            self._recording.cancel()
-
-    def finish_recording(self) -> None:
-        recording, self._recording = self._recording, None
-        if recording is not None:
-            recording.close()
-            events.info("recording saved: %s", self._shown_path(recording.path))
-
-    def _settings_info(self) -> SettingsInfo:
-        config = self._config
-        return SettingsInfo(roi=config.target.roi, pose=config.pose, behavior=config.behavior)
-
-    async def _publish_frame(
-        self,
-        frame: Frame,
-        faces: list[FaceObservation],
-        states: list[Attention | None],
-        focus: FaceObservation | None,
-    ) -> None:
-        assert self._web is not None
-        header = FrameHeader(
-            seq=frame.seq,
-            # Wall-clock milliseconds, the same clock as the events' timestamps.
-            ts=round((time.time() - (time.monotonic() - frame.timestamp)) * 1000),
-            attention=self._room.attention,
-            faces=[
-                _face_info(face, state, face is focus)
-                for face, state in zip(faces, states, strict=True)
-            ],
-        ).model_dump(mode="json")
-        web = self._config.web
-        packet = await asyncio.get_running_loop().run_in_executor(
-            self._worker,
-            lambda: encode_frame(
-                frame.image, header, max_width=web.max_width, quality=web.jpeg_quality
-            ),
-        )
-        self._web.publish_frame(packet)
-
-    def _status(self) -> StatusMessage:
-        now = time.monotonic()
-        stats = self._source.stats()
-        machine = self._machine.status(now)
-        player = self._player.state
-        calibration = self._calibration
-        return StatusMessage(
-            stream=StreamInfo(
-                connected=stats.connected,
-                width=stats.width,
-                height=stats.height,
-                fps=round(stats.fps, 1),
-                error=stats.last_error,
-            ),
-            analysis=AnalysisInfo(
-                fps=round(rate(self._analysis_times, now), 1), ms=round(self._analysis_ms, 1)
-            ),
-            player=PlayerInfo(
-                connected=self._player.connected,
-                name=self._player.name,
-                playback=player.playback if player else None,
-                app=player.app if player else None,
-                title=player.title if player else None,
-            ),
-            room=RoomInfo(
-                attention=self._room.attention,
-                viewers=self._room.viewers,
-                looking=self._room.looking,
-            ),
-            machine=MachineInfo(
-                streak_s=round(machine.streak_s, 2),
-                paused_by_us=machine.paused_by_us,
-                armed=machine.armed,
-                pending=machine.pending,
-                skipped=machine.skipped,
-            ),
-            automation=AutomationInfo(enabled=self._automation, dry_run=self._dry_run),
-            recording=self._recording_info(now),
-            calibration=None
-            if calibration is None
-            else CalibrationInfo(
-                phase="countdown" if calibration.counting_down(now) else "collecting",
-                remaining_s=round(calibration.remaining_s(now), 2),
-                phase_s=calibration.delay_s
-                if calibration.counting_down(now)
-                else calibration.duration_s,
-            ),
-            settings=self._settings_info(),
-        )
-
-    # Debug window
-
-    def _render(self, view: View) -> np.ndarray:
-        status = self._machine.status(time.monotonic())
-        room = self._room
-        behavior = self._config.behavior
-        player = self._player.state
-        footer: list[Line] = [
-            (
-                f"viewers {room.viewers}, looking {room.looking}"
-                f"  ({behavior.multiple_viewers.value}),  {view.attention.value} for "
-                f"{status.streak_s:.1f}s  (pause after {behavior.pause_after_s:.1f}s, "
-                f"resume after {behavior.resume_after_s:.1f}s)",
-                TEXT,
-                0.5,
-            ),
-            (f"Apple TV: {player if player else 'not connected'}", TEXT, 0.5),
-            (
-                f"paused by us: {'yes' if status.paused_by_us else 'no'}   "
-                f"armed: {'yes' if status.armed else 'no (waiting for a look)'}   "
-                f"pending: {status.pending.value if status.pending else '-'}",
-                MUTED,
-                0.45,
-            ),
-        ]
-        if self._dry_run:
-            footer.append(("DRY RUN: commands are only logged", HIGHLIGHT, 0.5))
-        if not self._automation:
-            footer.append(("AUTOMATION OFF (web UI)", HIGHLIGHT, 0.5))
-        footer.append(("q: quit", MUTED, 0.45))
-        fps = rate(self._analysis_times, time.monotonic())
-        return render(
-            view, self._config.pose, self._config.target.roi, self._source.stats(), fps, footer
-        )
-
-    def _poll_window(self) -> bool:
-        """Pump the debug window; False once the user asked to quit."""
-        key = cv2.waitKey(1) & 0xFF
-        if key in (ord("q"), _KEY_ESC):
-            return False
-        return cv2.getWindowProperty(WINDOW, cv2.WND_PROP_VISIBLE) >= 1
-
-
-def _face_info(face: FaceObservation, state: Attention | None, focus: bool) -> FaceInfo:
-    return FaceInfo(
-        box=(
-            round(face.box[0], 4),
-            round(face.box[1], 4),
-            round(face.box[2], 4),
-            round(face.box[3], 4),
-        ),
-        state=state.value if state is not None else "ignored",
-        yaw=round(face.pose.yaw, 1) if face.pose else None,
-        pitch=round(face.pose.pitch, 1) if face.pose else None,
-        eyes_down=round(face.eyes.look_down, 3) if face.eyes else None,
-        focus=focus,
-    )
-
-
-_EVENT_KINDS: tuple[tuple[str, EventKind], ...] = (
-    ("paused", "pause"),
-    ("would pause", "pause"),
-    ("resumed", "resume"),
-    ("would resume", "resume"),
-    ("player:", "player"),
-    ("calibrat", "calibration"),
-)
-
-
-class _EventForwarder(logging.Handler):
-    """Copies event log records to the web UI (from whatever thread logs them)."""
-
-    def __init__(self, web: WebServer, loop: asyncio.AbstractEventLoop) -> None:
-        super().__init__(level=logging.INFO)
-        self._web = web
-        self._loop = loop
-
-    def emit(self, record: logging.LogRecord) -> None:
-        text = record.getMessage()
-        kind: EventKind = next(
-            (k for prefix, k in _EVENT_KINDS if text.startswith(prefix)), "other"
-        )
-        event = EventInfo(
-            ts=round(record.created * 1000),
-            time=time.strftime("%H:%M:%S", time.localtime(record.created)),
-            level="warning" if record.levelno >= logging.WARNING else "info",
-            kind=kind,
-            text=text,
-        )
-        with contextlib.suppress(RuntimeError):  # loop already closed at shutdown
-            self._loop.call_soon_threadsafe(self._web.publish_event, event)

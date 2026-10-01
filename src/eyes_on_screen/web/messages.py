@@ -53,6 +53,8 @@ class AnalysisInfo(_Message):
 
 
 class PlayerInfo(_Message):
+    configured: bool
+    """False until an Apple TV is set up: eos then only watches."""
     connected: bool
     name: str | None
     playback: Playback | None

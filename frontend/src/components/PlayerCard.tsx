@@ -16,9 +16,18 @@ export function PlayerCard() {
         <span className="muted">{player?.name ?? ""}</span>
       </div>
       <div className="player">
-        <div className="player-state">{!player ? "–" : connected ? (playback ?? "unknown") : "offline"}</div>
+        <div className="player-state">
+          {!player ? "–" : !player.configured ? "Not set up" : connected ? (playback ?? "unknown") : "offline"}
+        </div>
         <div className="player-title">
-          {player?.title ?? (connected ? "Nothing playing" : player ? "Apple TV not connected" : "Nothing reported yet")}
+          {player?.title ??
+            (!player
+              ? "Nothing reported yet"
+              : !player.configured
+                ? "Watching only: pair an Apple TV with `eos atv pair`"
+                : connected
+                  ? "Nothing playing"
+                  : "Apple TV not connected")}
         </div>
         <div className="player-app">{player?.app ?? ""}</div>
         <div className="player-badges">

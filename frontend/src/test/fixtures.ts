@@ -6,7 +6,7 @@ const BASE: StatusMessage = {
   type: "status",
   stream: { connected: true, width: 2560, height: 1440, fps: 20, error: null },
   analysis: { fps: 10, ms: 12 },
-  player: { connected: true, name: "Living room", playback: "playing", app: "TV", title: "Show" },
+  player: { configured: true, connected: true, name: "Living room", playback: "playing", app: "TV", title: "Show" },
   room: { attention: "looking", viewers: 1, looking: 1 },
   machine: { streak_s: 0, paused_by_us: false, armed: true, pending: null, skipped: null },
   automation: { enabled: true, dry_run: false },

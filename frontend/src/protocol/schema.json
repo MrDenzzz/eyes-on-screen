@@ -429,6 +429,9 @@
     "PlayerInfo": {
       "additionalProperties": false,
       "properties": {
+        "configured": {
+          "type": "boolean"
+        },
         "connected": {
           "type": "boolean"
         },
@@ -474,6 +477,7 @@
         }
       },
       "required": [
+        "configured",
         "connected",
         "name",
         "playback",

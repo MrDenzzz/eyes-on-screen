@@ -79,10 +79,11 @@ output goes to `logs/go2rtc.log`.
 3. With the app: in `config.yaml` set `video.rtsp_url: "rtsp://127.0.0.1:8554/c400"`, then
 
    ```powershell
-   uv run eos preview
+   uv run eos run --dry-run
    ```
 
-   The window shows resolution, codec, measured fps and reconnects.
+   The web UI at <http://127.0.0.1:8765> shows the video, its resolution and measured fps;
+   connects and reconnects are logged to the console.
 
 A few `Could not find ref with POC` lines right after connecting are expected: the decoder
 joined in the middle of a GOP and outputs grey, smeared frames until the next key frame.

@@ -1,1 +1,0 @@
-"""OpenCV debug window overlay."""

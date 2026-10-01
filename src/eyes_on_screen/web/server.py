@@ -31,7 +31,7 @@ from fastapi.staticfiles import StaticFiles
 from starlette.requests import HTTPConnection
 from starlette.websockets import WebSocketDisconnect
 
-from eyes_on_screen.appletv.controller import AppleTvError
+from eyes_on_screen.appletv.state import AppleTvError
 from eyes_on_screen.config import WebConfig
 from eyes_on_screen.recording import NoSuchStep, RecordingError
 from eyes_on_screen.settings import SettingsError

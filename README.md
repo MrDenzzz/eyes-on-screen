@@ -18,8 +18,7 @@ uv run pytest
 ## Run
 
 ```shell
-uv run eos run             # headless; Ctrl+C to stop
-uv run eos run --debug     # live window: faces, attention, timers, player state
+uv run eos run             # Ctrl+C to stop; the web UI is at http://127.0.0.1:8765
 uv run eos run --dry-run   # only log what would be paused / resumed
 ```
 
@@ -64,7 +63,6 @@ around, close the eyes. Each step starts with a press of Start, a 5 s countdown 
 and ends with a double beep, so the viewer never has to look at the page while it records.
 Every analysed frame becomes a labelled CSV row in `logs/recordings/` (head pose, eye
 blendshapes, face size; no images), which is what pause thresholds are tuned against.
-`eos pose --record` writes the same columns, labelled with the keys 1-3.
 
 ## Development
 
@@ -81,11 +79,8 @@ npm run build      # rebuild the UI served by eos (commit the result)
 ## Camera
 
 The Xiaomi C400 is read over RTSP re-published by go2rtc: see [docs/go2rtc.md](docs/go2rtc.md).
-A local webcam works too (`video.source: webcam`). Check the stream with:
-
-```shell
-uv run eos preview
-```
+A local webcam works too (`video.source: webcam`). Without an Apple TV set up yet,
+`eos run` only watches: the web UI shows the stream, the viewers and their head pose.
 
 ## Apple TV
 
@@ -104,9 +99,10 @@ device is found by it on every connect, so its IP may change.
 
 ```shell
 uv run eos download-models   # YuNet + MediaPipe Face Landmarker, checksums verified
-uv run eos pose              # live view; c = calibrate, q = quit
-uv run eos pose --record logs/poses.csv
 ```
+
+Calibrate from the web UI: sit down, press **Calibrate**, look at the screen for the
+countdown. Your head pose becomes the screen direction.
 
 Faces across a room are only ~50 px wide in a 2560x1440 frame, too small for MediaPipe's
 own face detector. So YuNet finds faces inside `target.roi` at full resolution, and each

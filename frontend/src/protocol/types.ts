@@ -144,6 +144,7 @@ export interface MachineInfo {
  * via the `definition` "PlayerInfo".
  */
 export interface PlayerInfo {
+  configured: boolean;
   connected: boolean;
   name: string | null;
   playback: Playback | null;

@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from collections.abc import Callable
 from pathlib import Path
 
 import pyatv
@@ -13,7 +12,7 @@ from pyatv.const import DeviceState
 from pyatv.interface import AppleTV, DeviceListener, Playing, PushListener
 
 from eyes_on_screen.appletv.pairing import load_storage, scan
-from eyes_on_screen.appletv.state import Playback, PlayerState
+from eyes_on_screen.appletv.state import AppleTvError, Playback, PlayerState, StateCallback
 
 log = logging.getLogger(__name__)
 
@@ -29,8 +28,6 @@ _PLAYBACK = {
     DeviceState.Stopped: Playback.STOPPED,
     DeviceState.Seeking: Playback.SEEKING,
 }
-
-StateCallback = Callable[[PlayerState | None], None]
 
 _AUTH_ERRORS = (
     exceptions.AuthenticationError,
@@ -48,12 +45,8 @@ _CONNECTION_ERRORS = (
 )
 
 
-class AppleTvError(Exception):
-    """The Apple TV is unreachable or not paired. User-facing message."""
-
-
 class AppleTvController(PushListener, DeviceListener):
-    """One Apple TV: commands, plus the player state kept current by push updates.
+    """One Apple TV (a state.Player): commands, plus the state kept current by push updates.
 
     `on_state` gets every change, and None when the connection is lost. pyatv keeps
     listeners as weak references; the controller is its own listener, so it stays
@@ -68,7 +61,7 @@ class AppleTvController(PushListener, DeviceListener):
     ) -> None:
         self._identifier = identifier
         self._credentials_file = credentials_file
-        self._on_state = on_state
+        self.on_state = on_state
         self._atv: AppleTV | None = None
         self._state: PlayerState | None = None
         self._lost: asyncio.Event | None = None
@@ -195,5 +188,5 @@ class AppleTvController(PushListener, DeviceListener):
         if state == self._state:
             return
         self._state = state
-        if self._on_state is not None:
-            self._on_state(state)
+        if self.on_state is not None:
+            self.on_state(state)

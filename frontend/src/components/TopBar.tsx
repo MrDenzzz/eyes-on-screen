@@ -62,8 +62,10 @@ export function TopBar({ page }: { page: Page }) {
         />
         <Pill
           label="Apple TV"
-          level={!status ? "warn" : player?.connected ? "ok" : "bad"}
-          value={!status ? "–" : player?.connected ? (player.name ?? "connected") : "offline"}
+          level={!status ? "warn" : player?.connected ? "ok" : player?.configured ? "bad" : "warn"}
+          value={
+            !status ? "–" : player?.connected ? (player.name ?? "connected") : player?.configured ? "offline" : "not set up"
+          }
         />
         {status?.automation.dry_run && <span className="badge badge-warn">Dry run</span>}
         <label className="switch" title="When off, nothing is paused or resumed">

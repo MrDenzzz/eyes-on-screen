@@ -9,14 +9,16 @@ import aiohttp
 import numpy as np
 import pytest
 
-from eyes_on_screen.app import App, _EventForwarder
-from eyes_on_screen.appletv.controller import AppleTvError
+from eyes_on_screen.app import App
+from eyes_on_screen.appletv.state import AppleTvError
 from eyes_on_screen.config import WebConfig, load_config
 from eyes_on_screen.settings import SettingsError
 from eyes_on_screen.video.source import SourceStats
 from eyes_on_screen.vision.analyzer import FaceAnalyzer
 from eyes_on_screen.web import server as server_module
-from eyes_on_screen.web.messages import AutomationInfo, EventInfo, SettingsChanges
+from eyes_on_screen.web.bridge import AppControls, WebUi, status_message
+from eyes_on_screen.web.events import EventForwarder
+from eyes_on_screen.web.messages import EventInfo, SettingsChanges
 from eyes_on_screen.web.protocol import decode_frame, encode_frame
 from eyes_on_screen.web.server import WebServer
 
@@ -61,49 +63,33 @@ def app(tmp_path) -> App:
     return make_app(tmp_path)
 
 
-class FakeControls:
-    """Controls with canned answers, recording what the web layer asked for."""
+class FakeControls(AppControls):
+    """The real controls over an App without a player, recording what the web layer
+    asked for and failing on demand."""
 
     def __init__(self, app: App) -> None:
-        self.app = app
+        super().__init__(app)
         self.calls: list[tuple] = []
         self.settings_error: str | None = None
         self.player_error: str | None = None
-
-    def status(self):
-        return self.app.status()
 
     def change_settings(self, changes: SettingsChanges):
         self.calls.append(("settings", changes.as_changes()))
         if self.settings_error:
             raise SettingsError(self.settings_error)
-        return self.app._settings_info()
+        return super().change_settings(changes)
 
     def start_calibration(self):
         self.calls.append(("calibrate",))
 
     def set_automation(self, enabled: bool):
         self.calls.append(("automation", enabled))
-        return AutomationInfo(enabled=enabled, dry_run=False)
+        return super().set_automation(enabled)
 
     async def press(self, action):
         self.calls.append(("press", action))
         if self.player_error:
             raise AppleTvError(self.player_error)
-
-    # Recording goes to the real app: it only writes a CSV under tmp_path.
-
-    def recording_steps(self):
-        return self.app.recording_steps()
-
-    def start_recording_step(self, index):
-        return self.app.start_recording_step(index)
-
-    def cancel_recording_step(self):
-        self.app.cancel_recording_step()
-
-    def finish_recording(self):
-        self.app.finish_recording()
 
 
 @contextlib.asynccontextmanager
@@ -201,7 +187,7 @@ def test_rest_api(app):
     run(scenario)
 
 
-def test_recording_api(app):
+def test_recording_api(app, tmp_path):
     async def scenario():
         async with (
             serving(WebConfig(port=free_port()), FakeControls(app)) as (_, url),
@@ -227,8 +213,8 @@ def test_recording_api(app):
             assert (await http.delete("/api/recording")).status == 204
 
     run(scenario)
-    assert app._recording is None
-    [saved] = (app._config_path.parent / "logs" / "recordings").glob("gaze-*.csv")
+    assert app.recording is None
+    [saved] = (tmp_path / "logs" / "recordings").glob("gaze-*.csv")
     assert saved.read_text(encoding="utf-8").startswith("t,step,take,")
 
 
@@ -241,7 +227,7 @@ def test_websocket_pushes_events_status_and_frames(app):
                 assert history["type"] == "events"
                 assert [e["text"] for e in history["events"]] == ["before the page opened"]
 
-                server.publish_status(app.status())
+                server.publish_status(status_message(app))
                 status = await ws.receive_json()
                 assert status["type"] == "status"
                 assert status["settings"]["behavior"]["multiple_viewers"] == "any_away"
@@ -339,7 +325,7 @@ def test_events_are_forwarded_with_their_kind(message, level, kind):
 
     async def scenario():
         web = type("Web", (), {"publish_event": staticmethod(published.append)})()
-        handler = _EventForwarder(web, asyncio.get_running_loop())
+        handler = EventForwarder(web, asyncio.get_running_loop())
         handler.emit(logging.LogRecord("events", level, __file__, 1, message, None, None))
         await asyncio.sleep(0)
 
@@ -351,55 +337,29 @@ def test_events_are_forwarded_with_their_kind(message, level, kind):
     assert forwarded.level == ("warning" if level >= logging.WARNING else "info")
 
 
-class TestAppControls:
-    def test_settings_are_applied_live_and_saved(self, app):
-        changes = SettingsChanges.model_validate(
-            {"behavior": {"pause_after_s": 2.5}, "target": {"roi": [0, 0, 0.5, 0.5]}}
-        )
+def test_web_ui_pushes_what_the_app_sees(app):
+    async def scenario():
+        web = WebUi(WebConfig(port=free_port()), app)
+        await web.start()
+        try:
+            assert web in app.listeners
+            web.tick()  # what the analysis loop does on every turn
+            async with (
+                aiohttp.ClientSession() as http,
+                http.ws_connect(web.server.url + "ws") as ws,
+            ):
+                status = await ws.receive_json()
+                assert status["type"] == "status"
+                assert status["player"] == {
+                    "configured": False,
+                    "connected": False,
+                    "name": None,
+                    "playback": None,
+                    "app": None,
+                    "title": None,
+                }
+        finally:
+            await web.stop()
+        assert web not in app.listeners
 
-        settings = app.change_settings(changes)
-
-        assert settings.behavior.pause_after_s == 2.5
-        assert app._analyzer.roi == (0, 0, 0.5, 0.5)
-        assert app._machine.behavior.pause_after_s == 2.5
-        saved = app._config_path.read_text(encoding="utf-8")
-        assert "# mine" in saved
-        assert "pause_after_s: 2.5" in saved
-
-    def test_invalid_settings_are_rejected_and_nothing_changes(self, app):
-        changes = SettingsChanges.model_validate({"behavior": {"pause_after_s": 0}})
-
-        with pytest.raises(SettingsError, match=r"behavior\.pause_after_s"):
-            app.change_settings(changes)
-        assert app._machine.behavior.pause_after_s == 1.5
-
-    def test_automation_switch(self, app):
-        assert app.set_automation(False) == AutomationInfo(enabled=False, dry_run=False)
-        assert app._automation is False
-
-    def test_calibration_starts_with_a_countdown(self, app):
-        app.start_calibration()
-
-        assert app._calibration is not None
-        assert app._calibration.counting_down(app._calibration.start - 1)
-
-    def test_player_buttons_need_the_apple_tv(self, app):
-        with pytest.raises(AppleTvError, match="not connected"):
-            asyncio.run(app.press("pause"))
-
-    def test_guided_recording_shows_in_the_status_until_finished(self, app):
-        app.start_recording_step(2)
-
-        recording = app.status().recording
-        assert recording is not None
-        assert recording.current is not None
-        assert (recording.current.index, recording.current.phase) == (2, "countdown")
-
-        app.finish_recording()
-        assert app.status().recording is None
-
-    def test_status_serializes(self, app):
-        status = app.status()
-
-        assert '"type":"status"' in status.model_dump_json()
-        assert status.settings.roi == (0, 0, 1, 1)
+    run(scenario)
