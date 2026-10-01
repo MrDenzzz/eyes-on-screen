@@ -37,6 +37,23 @@ def cmd_config_check(config: AppConfig, args: argparse.Namespace) -> int:
     return EXIT_OK
 
 
+def cmd_preview(config: AppConfig, args: argparse.Namespace) -> int:
+    """Open the configured video source and show the raw stream."""
+    # Imported here: OpenCV is slow to import and config-check does not need it.
+    from eyes_on_screen.debug.preview import run_preview
+    from eyes_on_screen.video.capture import create_source
+
+    source = create_source(config.video)
+    source.start()
+    try:
+        run_preview(source)
+    except KeyboardInterrupt:
+        pass
+    finally:
+        source.stop()
+    return EXIT_OK
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="eos",
@@ -56,6 +73,8 @@ def build_parser() -> argparse.ArgumentParser:
         "config-check", help="validate the config and print the effective values"
     )
     check.set_defaults(handler=cmd_config_check)
+    preview = commands.add_parser("preview", help="show the raw video stream (q/Esc to quit)")
+    preview.set_defaults(handler=cmd_preview)
     return parser
 
 

@@ -15,7 +15,23 @@ class Frame:
     timestamp: float
     """time.monotonic() when the frame was read from the stream."""
     seq: int
-    """Frame counter since the source started; increases by one per decoded frame."""
+    """Frame number since the source started; keeps growing across reconnects."""
+
+
+@dataclass(frozen=True, slots=True)
+class SourceStats:
+    description: str
+    """Human-readable source name, safe to log (credentials removed)."""
+    connected: bool
+    width: int | None
+    height: int | None
+    codec: str | None
+    fps: float
+    """Measured incoming frame rate; 0 when frames stopped arriving."""
+    frames: int
+    reconnects: int
+    """How many times an established stream was lost."""
+    last_error: str | None
 
 
 class VideoSource(Protocol):
@@ -32,12 +48,12 @@ class VideoSource(Protocol):
     def stop(self) -> None:
         """Stop capturing and release the stream or device."""
 
-    def next_frame(self, timeout: float) -> Frame | None:
-        """Return the newest frame not returned before, waiting up to `timeout` seconds.
+    def wait_for_frame(self, newer_than: int, timeout: float) -> Frame | None:
+        """Return the newest frame with `seq > newer_than`, waiting up to `timeout` seconds.
 
-        Returns None if nothing new arrived in time (stream stalled or reconnecting).
+        Returns None if nothing newer arrived in time (stream stalled or reconnecting).
+        Pass -1 to get whatever frame is available.
         """
 
-    @property
-    def connected(self) -> bool:
-        """Whether the stream is currently open and delivering frames."""
+    def stats(self) -> SourceStats:
+        """Snapshot of the stream health, cheap enough to call on every frame."""
