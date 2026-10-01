@@ -140,7 +140,8 @@ class TestConfigCheckCommand:
         out = capsys.readouterr().out
         assert exit_code == cli.EXIT_OK
         assert "Config OK" in out
-        assert "source: webcam" in out
+        assert "video:\n  source: webcam\n" in out  # sections stay block-style
+        assert "  roi: [0.0, 0.0, 1.0, 1.0]\n" in out  # lists stay inline
         assert "apple_tv.identifier is not set" in out
 
     def test_invalid_config_fails_with_message(self, tmp_path, capsys):

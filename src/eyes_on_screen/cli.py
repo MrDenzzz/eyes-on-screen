@@ -18,11 +18,20 @@ EXIT_OK = 0
 EXIT_CONFIG_ERROR = 2
 
 
+class _ConfigDumper(yaml.SafeDumper):
+    """Block-style sections, but lists inline the way they are written: roi: [0.5, 0, 1, 1]."""
+
+
+_ConfigDumper.add_representer(
+    list,
+    lambda dumper, data: dumper.represent_sequence("tag:yaml.org,2002:seq", data, flow_style=True),
+)
+
+
 def cmd_config_check(config: AppConfig, args: argparse.Namespace) -> int:
     """Print the effective config (defaults applied, paths resolved) and soft warnings."""
     print(f"Config OK: {args.config.resolve()}\n")
-    # default_flow_style=None keeps scalar lists inline: roi: [0.5, 0.0, 1.0, 1.0]
-    dump = yaml.safe_dump(config.model_dump(mode="json"), sort_keys=False, default_flow_style=None)
+    dump = yaml.dump(config.model_dump(mode="json"), Dumper=_ConfigDumper, sort_keys=False)
     print(dump, end="")
 
     notes = []
