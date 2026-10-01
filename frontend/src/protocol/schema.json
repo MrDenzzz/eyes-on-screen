@@ -374,13 +374,24 @@
               "type": "null"
             }
           ]
+        },
+        "skipped": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/PlaybackCommand"
+            },
+            {
+              "type": "null"
+            }
+          ]
         }
       },
       "required": [
         "streak_s",
         "paused_by_us",
         "armed",
-        "pending"
+        "pending",
+        "skipped"
       ],
       "title": "MachineInfo",
       "type": "object"

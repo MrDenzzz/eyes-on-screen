@@ -22,18 +22,22 @@ export function describeNow(status: StatusMessage): NowInfo {
     progress: clamp01(streak / limit),
   });
   const say = (detail: string): NowInfo => ({ attention, detail, progress: 0 });
+  // A dry run only logs its commands: never promise a pause that will not happen.
+  const pausing = automation.dry_run ? "would pause" : "pausing";
+  const resuming = automation.dry_run ? "would resume" : "resuming";
 
   if (!automation.enabled) return say("automation is off");
   if (!player.connected) return say("Apple TV not connected");
   if (machine.pending) return say(machine.pending === "pause" ? "pausing…" : "resuming…");
+  if (machine.skipped) return say(`dry run · would ${machine.skipped}, nothing sent`);
   if (playing && machine.armed && attention === "away") {
-    return towards(behavior.pause_after_s, "pausing");
+    return towards(behavior.pause_after_s, pausing);
   }
   if (playing && machine.armed && attention === "absent" && behavior.on_face_lost === "pause") {
-    return towards(behavior.face_lost_after_s, "nobody here · pausing");
+    return towards(behavior.face_lost_after_s, `nobody here · ${pausing}`);
   }
   if (paused && machine.paused_by_us && attention === "looking") {
-    return towards(behavior.resume_after_s, "resuming");
+    return towards(behavior.resume_after_s, resuming);
   }
   if (paused && machine.paused_by_us) return say("paused by eos · look at the screen to resume");
   if (paused) return say("paused from the remote · left alone");

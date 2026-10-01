@@ -67,6 +67,19 @@ describe("describeNow", () => {
     expect(now.progress).toBeCloseTo(0.5);
   });
 
+  it("never promises a pause in a dry run", () => {
+    const counting = describeNow(
+      makeStatus({ automation: { dry_run: true }, room: { attention: "away" }, machine: { streak_s: 0.6 } }),
+    );
+    const decided = describeNow(
+      makeStatus({ automation: { dry_run: true }, room: { attention: "away" }, machine: { skipped: "pause" } }),
+    );
+
+    expect(counting.detail).toBe("would pause in 0.9 s");
+    expect(decided.detail).toBe("dry run · would pause, nothing sent");
+    expect(decided.progress).toBe(0);
+  });
+
   it("leaves a pause from the remote alone", () => {
     const now = describeNow(makeStatus({ player: { playback: "paused" }, machine: { paused_by_us: false } }));
 

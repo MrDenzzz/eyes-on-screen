@@ -49,6 +49,8 @@ class MachineStatus:
     paused_by_us: bool
     armed: bool
     pending: PlaybackCommand | None
+    skipped: PlaybackCommand | None
+    """Decided in the current streak but not sent (dry run)."""
 
 
 class PlaybackStateMachine:
@@ -74,6 +76,8 @@ class PlaybackStateMachine:
         self._paused_by_us = False
         self._armed = True
         self._pending: tuple[PlaybackCommand, float] | None = None
+        self._streak = 0
+        self._skipped: tuple[PlaybackCommand, int] | None = None
 
     @property
     def behavior(self) -> BehaviorConfig:
@@ -90,14 +94,25 @@ class PlaybackStateMachine:
         if gap is None or gap > MAX_OBSERVATION_GAP_S or attention is not self._attention:
             self._attention = attention
             self._since = now
+            self._streak += 1
         self._last_observation = now
         if attention is Attention.LOOKING:
             self._armed = True
 
         self._expire_pending(now)
-        if self._pending is not None or not self._player_connected:
+        if self._pending is not None or not self._player_connected or self._skipped_now():
             return None
         return self._decide(attention, now - self._since, now)
+
+    def skip(self) -> None:
+        """The command just decided was not sent (dry run): expect no confirmation.
+
+        It is not decided again until the attention changes, so a dry run logs one
+        "would pause" per look away instead of one every COMMAND_TIMEOUT_S.
+        """
+        if self._pending is not None:
+            self._skipped = (self._pending[0], self._streak)
+            self._pending = None
 
     def player_changed(self, state: PlayerState | None, now: float) -> None:
         """Feed a player update; None means the Apple TV connection is gone."""
@@ -138,7 +153,11 @@ class PlaybackStateMachine:
             paused_by_us=self._paused_by_us,
             armed=self._armed,
             pending=self._pending[0] if self._pending else None,
+            skipped=self._skipped[0] if self._skipped_now() else None,
         )
+
+    def _skipped_now(self) -> bool:
+        return self._skipped is not None and self._skipped[1] == self._streak
 
     def _decide(self, attention: Attention, streak: float, now: float) -> Decision | None:
         behavior = self._behavior

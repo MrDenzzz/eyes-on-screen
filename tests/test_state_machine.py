@@ -163,6 +163,25 @@ class TestCommandConfirmation:
         assert commands(room.watch(AWAY, 4.0)) == [PlaybackCommand.PAUSE]
 
 
+class TestDryRun:
+    def test_a_skipped_command_is_decided_once_per_streak(self, room):
+        room.watch(LOOKING, 1)
+        assert commands(room.watch(AWAY, 1.7)) == [PlaybackCommand.PAUSE]
+        room.machine.skip()
+
+        assert room.watch(AWAY, 10) == []  # no confirmation expected, nothing resent
+        assert room.machine.status(room.clock.now()).skipped is PlaybackCommand.PAUSE
+
+    def test_the_next_look_away_is_decided_again(self, room):
+        room.watch(LOOKING, 1)
+        room.watch(AWAY, 1.7)
+        room.machine.skip()
+        room.watch(LOOKING, 1)
+
+        assert room.machine.status(room.clock.now()).skipped is None
+        assert commands(room.watch(AWAY, 1.7)) == [PlaybackCommand.PAUSE]
+
+
 def test_status_snapshot(room):
     room.pause_and_confirm()
 
@@ -172,4 +191,5 @@ def test_status_snapshot(room):
     assert status.playback is Playback.PAUSED
     assert status.paused_by_us
     assert status.pending is None
+    assert status.skipped is None
     assert status.streak_s == pytest.approx(1.6)

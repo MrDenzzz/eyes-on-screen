@@ -70,6 +70,7 @@ class MachineInfo(_Message):
     paused_by_us: bool
     armed: bool
     pending: PlaybackCommand | None
+    skipped: PlaybackCommand | None
 
 
 class AutomationInfo(_Message):

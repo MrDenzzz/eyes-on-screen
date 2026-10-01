@@ -137,6 +137,7 @@ export interface MachineInfo {
   paused_by_us: boolean;
   armed: boolean;
   pending: PlaybackCommand | null;
+  skipped: PlaybackCommand | null;
 }
 /**
  * This interface was referenced by `Protocol`'s JSON-Schema

@@ -196,6 +196,7 @@ class App:
 
     async def _execute(self, decision: Decision) -> None:
         if self._dry_run:
+            self._machine.skip()
             events.info("would %s: %s", decision.command.value, decision.reason)
             return
         try:
@@ -345,6 +346,7 @@ class App:
                 paused_by_us=machine.paused_by_us,
                 armed=machine.armed,
                 pending=machine.pending,
+                skipped=machine.skipped,
             ),
             automation=AutomationInfo(enabled=self._automation, dry_run=self._dry_run),
             calibration=None
