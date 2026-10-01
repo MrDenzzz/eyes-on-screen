@@ -1,0 +1,55 @@
+# eyes-on-screen configuration.
+# Copy this file to config.yaml (git-ignored) and adjust it.
+# Relative paths are resolved against the folder this file lives in.
+
+video:
+  # rtsp   - stream re-published locally by go2rtc (Xiaomi C400)
+  # webcam - local camera by index (fallback)
+  source: rtsp
+  rtsp_url: "rtsp://127.0.0.1:8554/c400"
+  webcam_index: 0
+  # Frames analysed per second; newer frames replace older ones, nothing is queued.
+  process_fps: 10
+  # Delay between reconnection attempts when the stream drops.
+  reconnect_delay_s: 2.0
+
+detection:
+  # MediaPipe Face Landmarker model bundle.
+  model_path: models/face_landmarker.task
+  # Several people may be on the sofa; the target viewer is picked by target.roi.
+  max_faces: 3
+  min_detection_confidence: 0.5
+
+target:
+  # Part of the frame where the target viewer sits: [x1, y1, x2, y2] as fractions
+  # of the frame size, (0, 0) is the top-left corner. Example: right half.
+  roi: [0.5, 0.0, 1.0, 1.0]
+
+pose:
+  # Head orientation in degrees that counts as "looking at the screen".
+  # The camera sits under the TV, so this is NOT 0/0 - calibrate it.
+  yaw_center_deg: 0.0
+  pitch_center_deg: 0.0
+  # Allowed deviation from the centre before the viewer counts as looking away.
+  yaw_tolerance_deg: 25
+  pitch_tolerance_deg: 20
+
+behavior:
+  # Pause once the viewer has been looking away this long.
+  pause_after_s: 1.5
+  # Resume once the viewer has been looking at the screen this long.
+  resume_after_s: 0.5
+  # What to do when the target face is gone from the ROI (viewer left): pause | ignore
+  on_face_lost: pause
+  face_lost_after_s: 3.0
+
+apple_tv:
+  # Device identifier (keep the quotes). Empty until the device has been found.
+  identifier: ""
+  # Where pyatv keeps pairing credentials. Git-ignored - never commit it.
+  credentials_file: data/pyatv.conf
+
+logging:
+  level: INFO  # DEBUG | INFO | WARNING | ERROR
+  # Pause/resume events with reasons; set to null to disable the file.
+  events_file: logs/events.log
