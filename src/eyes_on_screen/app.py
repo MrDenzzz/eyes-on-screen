@@ -8,6 +8,7 @@ import logging
 import time
 from collections import deque
 from concurrent.futures import ThreadPoolExecutor
+from datetime import datetime
 from pathlib import Path
 from typing import Literal
 
@@ -27,6 +28,7 @@ from eyes_on_screen.attention.viewers import RoomAttention, ViewerFilter, room_a
 from eyes_on_screen.config import AppConfig
 from eyes_on_screen.debug.overlay import HIGHLIGHT, MUTED, TEXT, Line, View, rate, render
 from eyes_on_screen.logging_setup import EVENTS_LOGGER
+from eyes_on_screen.recording import GAZE_STEPS, GuidedRecording, RecordingError
 from eyes_on_screen.settings import Changes, SettingsError, apply_changes, save_changes
 from eyes_on_screen.video.source import Frame, VideoSource
 from eyes_on_screen.vision.analyzer import FaceAnalyzer, FaceObservation
@@ -40,6 +42,10 @@ from eyes_on_screen.web.messages import (
     FrameHeader,
     MachineInfo,
     PlayerInfo,
+    RecordingInfo,
+    RecordingProgress,
+    RecordingResult,
+    RecordingStepInfo,
     RoomInfo,
     SettingsChanges,
     SettingsInfo,
@@ -95,6 +101,7 @@ class App:
         self._analysis_times: deque[float] = deque(maxlen=20)
         self._analysis_ms = 0.0
         self._calibration: CalibrationSession | None = None
+        self._recording: GuidedRecording | None = None
 
     async def run(self) -> None:
         """Run until cancelled (Ctrl+C) or, in debug mode, until the window is closed."""
@@ -113,6 +120,7 @@ class App:
             self._worker.shutdown(wait=True)
             if self._debug:
                 cv2.destroyWindow(WINDOW)
+            self.finish_recording()
             events.info("stopped")
             if self._web is not None:
                 events.removeHandler(forwarder)
@@ -158,6 +166,7 @@ class App:
                 self._analysis_ms = (time.perf_counter() - started) * 1000
                 self._analysis_times.append(time.monotonic())
                 await self._observe(frame, faces)
+            self._tick_recording(time.monotonic())
             if self._web is not None:
                 self._web.publish_status(self._status())
             if self._debug and not self._poll_window():
@@ -179,6 +188,8 @@ class App:
             self._calibration.add(now, focus.pose if focus else None)
             if self._calibration.finished(now):
                 self._finish_calibration()
+        if self._recording is not None:
+            self._recording.add(now, faces, focus, classify(focus, pose))
 
         if self._automation:
             decision = self._machine.observe(room.attention, now)
@@ -248,6 +259,47 @@ class App:
             len(poses),
         )
 
+    # Guided recording
+
+    def _tick_recording(self, now: float) -> None:
+        if self._recording is None:
+            return
+        result = self._recording.update(now)
+        if result is not None:
+            step = self._recording.steps[result.index]
+            share = result.with_face / result.frames if result.frames else 0.0
+            events.info(
+                'recorded step %d "%s": %d frames, face measured in %.0f%%',
+                result.index + 1,
+                step.title,
+                result.frames,
+                share * 100,
+            )
+
+    def _recording_info(self, now: float) -> RecordingInfo | None:
+        recording = self._recording
+        if recording is None:
+            return None
+        progress = recording.progress(now)
+        return RecordingInfo(
+            file=self._shown_path(recording.path),
+            current=None
+            if progress is None
+            else RecordingProgress.model_validate(progress, from_attributes=True),
+            done=[
+                RecordingResult.model_validate(result, from_attributes=True)
+                for result in recording.results
+            ],
+            last=recording.last,
+        )
+
+    def _shown_path(self, path: Path) -> str:
+        """`path` relative to the config folder, where the logs usually are."""
+        try:
+            return path.relative_to(self._config_path.resolve().parent).as_posix()
+        except ValueError:
+            return str(path)
+
     # Web UI
 
     # Controls for the web UI (see web/server.py)
@@ -280,6 +332,36 @@ class App:
     async def press(self, action: Literal["play", "pause"]) -> None:
         await (self._player.play() if action == "play" else self._player.pause())
         events.info("%s pressed in the web UI", action)
+
+    def recording_steps(self) -> list[RecordingStepInfo]:
+        return [RecordingStepInfo.model_validate(s, from_attributes=True) for s in GAZE_STEPS]
+
+    def start_recording_step(self, index: int) -> RecordingInfo:
+        now = time.monotonic()
+        recording = self._recording or GuidedRecording(
+            self._config.logging.recordings_dir
+            / datetime.now().strftime("gaze-%Y-%m-%d_%H-%M-%S.csv")
+        )
+        try:
+            recording.start(index, now)
+        except OSError as exc:
+            raise RecordingError(f"cannot write {recording.path}: {exc}") from exc
+        if self._recording is None:
+            self._recording = recording
+            events.info("recording to %s", self._shown_path(recording.path))
+        info = self._recording_info(now)
+        assert info is not None
+        return info
+
+    def cancel_recording_step(self) -> None:
+        if self._recording is not None:
+            self._recording.cancel()
+
+    def finish_recording(self) -> None:
+        recording, self._recording = self._recording, None
+        if recording is not None:
+            recording.close()
+            events.info("recording saved: %s", self._shown_path(recording.path))
 
     def _settings_info(self) -> SettingsInfo:
         config = self._config
@@ -349,6 +431,7 @@ class App:
                 skipped=machine.skipped,
             ),
             automation=AutomationInfo(enabled=self._automation, dry_run=self._dry_run),
+            recording=self._recording_info(now),
             calibration=None
             if calibration is None
             else CalibrationInfo(

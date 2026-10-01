@@ -118,6 +118,7 @@ class AppleTvConfig(_Section):
 class LoggingConfig(_Section):
     level: Literal["DEBUG", "INFO", "WARNING", "ERROR"] = "INFO"
     events_file: Path | None = Path("logs/events.log")
+    recordings_dir: Path = Path("logs/recordings")
 
     @field_validator("level", mode="before")
     @classmethod
@@ -205,7 +206,10 @@ class AppConfig(_Section):
                     }
                 ),
                 "logging": self.logging.model_copy(
-                    update={"events_file": anchor_optional(self.logging.events_file)}
+                    update={
+                        "events_file": anchor_optional(self.logging.events_file),
+                        "recordings_dir": anchor(self.logging.recordings_dir),
+                    }
                 ),
             }
         )

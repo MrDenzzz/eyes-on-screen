@@ -33,12 +33,15 @@ from starlette.websockets import WebSocketDisconnect
 
 from eyes_on_screen.appletv.controller import AppleTvError
 from eyes_on_screen.config import WebConfig
+from eyes_on_screen.recording import NoSuchStep, RecordingError
 from eyes_on_screen.settings import SettingsError
 from eyes_on_screen.web.messages import (
     AutomationInfo,
     AutomationUpdate,
     EventInfo,
     EventsMessage,
+    RecordingInfo,
+    RecordingStepInfo,
     SettingsChanges,
     SettingsInfo,
     StatusMessage,
@@ -75,6 +78,16 @@ class Controls(Protocol):
     async def press(self, action: Literal["play", "pause"]) -> None:
         """Raises AppleTvError when the Apple TV is unreachable."""
         ...
+
+    def recording_steps(self) -> list[RecordingStepInfo]: ...
+
+    def start_recording_step(self, index: int) -> RecordingInfo:
+        """Opens a recording file on the first step; raises RecordingError."""
+        ...
+
+    def cancel_recording_step(self) -> None: ...
+
+    def finish_recording(self) -> None: ...
 
 
 def lan_address() -> str | None:
@@ -254,6 +267,42 @@ class WebServer:
                 await controls.press(action)
             except AppleTvError as exc:
                 raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, str(exc)) from exc
+
+        @router.get("/recording/steps", summary="The steps of a guided gaze recording")
+        async def get_recording_steps() -> list[RecordingStepInfo]:
+            return controls.recording_steps()
+
+        @router.post(
+            "/recording/steps/{index}",
+            summary="Start or redo a step: a countdown, then a labelled row per frame",
+            responses={
+                404: {"description": "No such step"},
+                409: {"description": "Another step is still running"},
+            },
+        )
+        async def start_recording_step(index: int) -> RecordingInfo:
+            try:
+                return controls.start_recording_step(index)
+            except NoSuchStep as exc:
+                raise HTTPException(status.HTTP_404_NOT_FOUND, str(exc)) from exc
+            except RecordingError as exc:
+                raise HTTPException(status.HTTP_409_CONFLICT, str(exc)) from exc
+
+        @router.delete(
+            "/recording/current",
+            status_code=status.HTTP_204_NO_CONTENT,
+            summary="Stop the running step",
+        )
+        async def cancel_recording_step() -> None:
+            controls.cancel_recording_step()
+
+        @router.delete(
+            "/recording",
+            status_code=status.HTTP_204_NO_CONTENT,
+            summary="Finish the recording and close its file",
+        )
+        async def finish_recording() -> None:
+            controls.finish_recording()
 
         return router
 

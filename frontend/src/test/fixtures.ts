@@ -11,6 +11,7 @@ const BASE: StatusMessage = {
   machine: { streak_s: 0, paused_by_us: false, armed: true, pending: null, skipped: null },
   automation: { enabled: true, dry_run: false },
   calibration: null,
+  recording: null,
   settings: {
     roi: [0.1, 0.3, 0.75, 0.65],
     pose: { yaw_center_deg: 2.9, pitch_center_deg: 3.6, yaw_tolerance_deg: 20, pitch_tolerance_deg: 15 },

@@ -1,7 +1,8 @@
 """Messages between `eos run` and the web UI, as pydantic models.
 
 The WebSocket pushes StatusMessage, binary frames (FrameHeader + JPEG) and
-EventsMessage; the REST API (web/server.py) takes SettingsChanges and AutomationUpdate.
+EventsMessage; the REST API (web/server.py) takes SettingsChanges and AutomationUpdate
+and lists the steps of a guided recording (RecordingStepInfo).
 These models are the single source of truth: FastAPI validates requests and documents
 them (OpenAPI at /api/docs), and their JSON Schema becomes the frontend's TypeScript
 types (`frontend/src/protocol`). Regenerate after a change:
@@ -84,6 +85,38 @@ class CalibrationInfo(_Message):
     phase_s: float
 
 
+class RecordingStepInfo(_Message):
+    label: str
+    title: str
+    instruction: str
+    duration_s: float
+
+
+class RecordingProgress(_Message):
+    index: int
+    phase: Literal["countdown", "recording"]
+    remaining_s: float
+    phase_s: float
+    frames: int
+    with_face: int
+
+
+class RecordingResult(_Message):
+    index: int
+    take: int
+    frames: int
+    with_face: int
+
+
+class RecordingInfo(_Message):
+    file: str
+    current: RecordingProgress | None
+    done: list[RecordingResult]
+    """The latest take of every finished step, by step."""
+    last: int | None
+    """The step finished most recently."""
+
+
 class SettingsInfo(_Message):
     roi: Roi
     pose: PoseConfig
@@ -99,6 +132,7 @@ class StatusMessage(_Message):
     machine: MachineInfo
     automation: AutomationInfo
     calibration: CalibrationInfo | None
+    recording: RecordingInfo | None
     settings: SettingsInfo
 
 
@@ -186,6 +220,7 @@ def protocol_schema() -> dict[str, Any]:
             (StatusMessage, "serialization"),
             (FrameHeader, "serialization"),
             (EventsMessage, "serialization"),
+            (RecordingStepInfo, "serialization"),
             (SettingsChanges, "validation"),
             (AutomationUpdate, "validation"),
         ],

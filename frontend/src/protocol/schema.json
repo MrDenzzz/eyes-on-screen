@@ -571,6 +571,135 @@
       "title": "PoseConfig",
       "type": "object"
     },
+    "RecordingInfo": {
+      "additionalProperties": false,
+      "properties": {
+        "file": {
+          "type": "string"
+        },
+        "current": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/RecordingProgress"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "done": {
+          "items": {
+            "$ref": "#/$defs/RecordingResult"
+          },
+          "type": "array"
+        },
+        "last": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "file",
+        "current",
+        "done",
+        "last"
+      ],
+      "title": "RecordingInfo",
+      "type": "object"
+    },
+    "RecordingProgress": {
+      "additionalProperties": false,
+      "properties": {
+        "index": {
+          "type": "integer"
+        },
+        "phase": {
+          "enum": [
+            "countdown",
+            "recording"
+          ],
+          "type": "string"
+        },
+        "remaining_s": {
+          "type": "number"
+        },
+        "phase_s": {
+          "type": "number"
+        },
+        "frames": {
+          "type": "integer"
+        },
+        "with_face": {
+          "type": "integer"
+        }
+      },
+      "required": [
+        "index",
+        "phase",
+        "remaining_s",
+        "phase_s",
+        "frames",
+        "with_face"
+      ],
+      "title": "RecordingProgress",
+      "type": "object"
+    },
+    "RecordingResult": {
+      "additionalProperties": false,
+      "properties": {
+        "index": {
+          "type": "integer"
+        },
+        "take": {
+          "type": "integer"
+        },
+        "frames": {
+          "type": "integer"
+        },
+        "with_face": {
+          "type": "integer"
+        }
+      },
+      "required": [
+        "index",
+        "take",
+        "frames",
+        "with_face"
+      ],
+      "title": "RecordingResult",
+      "type": "object"
+    },
+    "RecordingStepInfo": {
+      "additionalProperties": false,
+      "properties": {
+        "label": {
+          "type": "string"
+        },
+        "title": {
+          "type": "string"
+        },
+        "instruction": {
+          "type": "string"
+        },
+        "duration_s": {
+          "type": "number"
+        }
+      },
+      "required": [
+        "label",
+        "title",
+        "instruction",
+        "duration_s"
+      ],
+      "title": "RecordingStepInfo",
+      "type": "object"
+    },
     "RoomInfo": {
       "additionalProperties": false,
       "properties": {
@@ -706,6 +835,16 @@
             }
           ]
         },
+        "recording": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/RecordingInfo"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
         "settings": {
           "$ref": "#/$defs/SettingsInfo"
         }
@@ -719,6 +858,7 @@
         "machine",
         "automation",
         "calibration",
+        "recording",
         "settings"
       ],
       "title": "StatusMessage",

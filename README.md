@@ -56,6 +56,16 @@ WebSocket for status, video frames and events. The UI is a React + TypeScript ap
 once, as pydantic models in `web/messages.py`; their JSON Schema generates the
 TypeScript types, and a test fails when the two drift apart.
 
+### Gaze recording
+
+The **Record** tab (<http://127.0.0.1:8765/#record>, works from a phone) walks a viewer
+through scripted steps: watch the TV, read a phone in the hands and on the lap, look
+around, close the eyes. Each step starts with a press of Start, a 5 s countdown and a beep,
+and ends with a double beep, so the viewer never has to look at the page while it records.
+Every analysed frame becomes a labelled CSV row in `logs/recordings/` (head pose, eye
+blendshapes, face size; no images), which is what pause thresholds are tuned against.
+`eos pose --record` writes the same columns, labelled with the keys 1-3.
+
 ## Development
 
 ```shell

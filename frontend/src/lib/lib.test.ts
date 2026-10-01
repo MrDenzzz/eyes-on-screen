@@ -3,7 +3,9 @@ import { describe, expect, it } from "vitest";
 import { decodeFrame } from "../protocol/frame";
 import { makeStatus } from "../test/fixtures";
 import { seconds, signed } from "./format";
+import { pageFromHash } from "../hooks/usePage";
 import { describeNow } from "./now";
+import { faceShare, formatClock, nextStep } from "./recording";
 import { MAX_GAP_MS, toRuns } from "./timeline";
 
 describe("decodeFrame", () => {
@@ -105,5 +107,25 @@ describe("format", () => {
     expect(signed(-12)).toBe("−12");
     expect(signed(3.14, 1)).toBe("+3.1");
     expect(seconds(-0.2)).toBe("0.0 s");
+  });
+});
+
+describe("recording helpers", () => {
+  it("picks the first step without a take", () => {
+    expect(nextStep(3, new Map([[0, {}], [2, {}]]))).toBe(1);
+    expect(nextStep(2, new Map([[0, {}], [1, {}]]))).toBeNull();
+  });
+
+  it("formats the share of frames with a face and the time left", () => {
+    expect(faceShare({ frames: 400, with_face: 384 })).toBe("96%");
+    expect(faceShare({ frames: 0, with_face: 0 })).toBe("–");
+    expect(formatClock(12.3)).toBe("0:13");
+    expect(formatClock(75)).toBe("1:15");
+    expect(formatClock(-1)).toBe("0:00");
+  });
+
+  it("routes #record to the recording page", () => {
+    expect(pageFromHash("#record")).toBe("record");
+    expect(pageFromHash("")).toBe("live");
   });
 });

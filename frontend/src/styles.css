@@ -286,6 +286,86 @@ input[type="range"]::-moz-range-thumb { width: 16px; height: 16px; border-radius
 .ev-text { font-size: 13px; overflow-wrap: anywhere; }
 .ev-time { font-family: var(--mono); font-size: 11.5px; color: var(--faint); }
 
+/* Page tabs */
+
+.tabs { display: inline-flex; gap: 3px; padding: 3px; border-radius: 10px; background: #0d1017; border: 1px solid var(--line); }
+.tabs a {
+  display: inline-flex; align-items: center; height: 28px; padding: 0 14px;
+  border-radius: 7px; color: var(--muted); text-decoration: none; font-size: 13px; font-weight: 560;
+  transition: background 0.15s, color 0.15s;
+}
+.tabs a:hover { color: var(--text); }
+.tabs a.on { background: #262c3d; color: var(--text); box-shadow: 0 1px 0 rgba(255, 255, 255, 0.06) inset; }
+
+/* Guided recording */
+
+.record {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 360px;
+  gap: 20px;
+  max-width: 1180px;
+  margin: 0 auto;
+  padding: 20px 24px 40px;
+}
+.record-stage { display: flex; flex-direction: column; padding: 18px 24px 16px; }
+.record-steps { align-self: start; }
+.record-loading { display: grid; place-items: center; min-height: 320px; }
+.record-file { margin-left: auto; font-family: var(--mono); font-size: 11.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+.record-now, .record-next { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; padding: 14px 0 6px; text-align: center; }
+.record-intro { max-width: 540px; margin: 0 0 10px; color: var(--muted); }
+.record-kicker { color: var(--muted); font-size: 12px; font-weight: 650; letter-spacing: 0.9px; text-transform: uppercase; }
+.record-title { font-size: 28px; font-weight: 700; letter-spacing: 0.2px; line-height: 1.2; }
+.record-instruction { max-width: 520px; margin: 0; font-size: 16px; line-height: 1.5; color: #cfd5e2; }
+.record-stats { min-height: 18px; color: var(--faint); font-size: 12.5px; font-variant-numeric: tabular-nums; }
+.record-actions { display: flex; flex-wrap: wrap; justify-content: center; gap: 10px; margin-top: 8px; }
+.record-next .hint { max-width: 460px; margin-top: 4px; }
+.record-done-mark {
+  display: grid; place-items: center; width: 64px; height: 64px; border-radius: 50%;
+  background: rgba(62, 207, 142, 0.14); color: var(--looking); font-size: 30px; font-weight: 700;
+}
+
+.ring { position: relative; width: 190px; height: 190px; margin-bottom: 4px; }
+.ring svg { width: 100%; height: 100%; transform: rotate(-90deg); }
+.ring-track { fill: none; stroke: rgba(255, 255, 255, 0.1); stroke-width: 5; }
+.ring-arc { fill: none; stroke: var(--accent); stroke-width: 5; stroke-linecap: round; stroke-dasharray: 327; transition: stroke-dashoffset 0.15s linear; }
+.is-recording .ring-arc { stroke: var(--danger); }
+.ring span { position: absolute; inset: 0; display: grid; place-items: center; font-size: 46px; font-weight: 700; font-variant-numeric: tabular-nums; }
+
+.record-phase { display: inline-flex; align-items: center; gap: 8px; font-size: 12.5px; font-weight: 700; letter-spacing: 1.2px; text-transform: uppercase; color: var(--accent); }
+.is-recording .record-phase { color: var(--danger); }
+.rec-dot { width: 9px; height: 9px; border-radius: 50%; background: var(--danger); animation: blink 1.2s infinite; }
+@keyframes blink { 50% { opacity: 0.25; } }
+
+.record-saved {
+  margin-top: 14px; padding: 10px 14px; border-radius: 10px; text-align: center; font-size: 13px;
+  background: rgba(62, 207, 142, 0.1); border: 1px solid rgba(62, 207, 142, 0.28); color: var(--looking);
+}
+.record-saved code { font-family: var(--mono); font-size: 12px; color: var(--text); }
+
+.record-foot { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; margin-top: 18px; padding-top: 14px; border-top: 1px solid var(--line); }
+.record-live { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; min-height: 24px; }
+
+.btn-lg { height: 46px; padding: 0 30px; border-radius: 12px; font-size: 15px; white-space: nowrap; }
+.btn-sm { height: 28px; padding: 0 10px; font-size: 12px; }
+
+.steps { list-style: none; margin: 0; padding: 0; }
+.step { display: grid; grid-template-columns: 28px 1fr auto; gap: 12px; align-items: center; padding: 10px 0; border-top: 1px solid var(--line); }
+.step:first-child { border-top: 0; padding-top: 2px; }
+.step-num { display: grid; place-items: center; width: 28px; height: 28px; border-radius: 50%; background: rgba(255, 255, 255, 0.06); color: var(--muted); font-size: 12.5px; font-weight: 700; }
+.step-title { font-size: 13.5px; font-weight: 600; }
+.step-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 3px; color: var(--faint); font-size: 12px; }
+.step-todo .step-title { color: var(--muted); }
+.step-done .step-num { background: rgba(62, 207, 142, 0.15); color: var(--looking); }
+.step-next .step-num { background: var(--accent-soft); color: var(--accent); box-shadow: 0 0 0 1px rgba(124, 140, 255, 0.45) inset; }
+.step-running .step-num { background: rgba(255, 107, 107, 0.16); color: var(--danger); }
+
+.tag { padding: 1px 7px; border-radius: 6px; background: rgba(255, 255, 255, 0.06); color: var(--muted); font-size: 11px; font-weight: 650; }
+.tag-screen { background: rgba(62, 207, 142, 0.12); color: var(--looking); }
+.tag-phone { background: rgba(245, 165, 36, 0.13); color: var(--away); }
+.tag-elsewhere { background: var(--accent-soft); color: var(--accent); }
+.tag-closed { color: var(--absent); }
+
 /* Toasts and offline */
 
 .toasts { position: fixed; right: 20px; bottom: 20px; z-index: 40; display: flex; flex-direction: column; gap: 10px; }
@@ -304,7 +384,7 @@ input[type="range"]::-moz-range-thumb { width: 16px; height: 16px; border-radius
 /* Smaller screens */
 
 @media (max-width: 1100px) {
-  .layout { grid-template-columns: minmax(0, 1fr); }
+  .layout, .record { grid-template-columns: minmax(0, 1fr); }
 }
 
 @media (max-width: 640px) {
@@ -317,4 +397,16 @@ input[type="range"]::-moz-range-thumb { width: 16px; height: 16px; border-radius
   .now-state { font-size: 16px; }
   .legend { display: none; }
   .zone-bar { top: auto; bottom: 8px; white-space: normal; }
+  .tabs { order: 3; width: 100%; }
+  .tabs a { flex: 1; justify-content: center; }
+  .record { padding: 14px 12px 32px; gap: 14px; }
+  .record-stage { padding: 14px 14px 12px; }
+  .record-file { display: none; }
+  .ring { width: 150px; height: 150px; }
+  .ring span { font-size: 38px; }
+  .record-title { font-size: 22px; }
+  .record-instruction { font-size: 15px; }
+  .record-actions { width: 100%; }
+  .record-actions .btn-lg { flex: 1; padding: 0 16px; }
+  .record-actions .btn-primary { flex-basis: 100%; }
 }

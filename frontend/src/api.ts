@@ -1,4 +1,11 @@
-import type { AutomationInfo, AutomationUpdate, SettingsChanges, SettingsInfo } from "./protocol/types";
+import type {
+  AutomationInfo,
+  AutomationUpdate,
+  RecordingInfo,
+  RecordingStepInfo,
+  SettingsChanges,
+  SettingsInfo,
+} from "./protocol/types";
 
 /** An error the API answered with, phrased for people. */
 export class ApiError extends Error {
@@ -49,4 +56,8 @@ export const api = {
   setAutomation: (enabled: boolean) =>
     request<AutomationInfo>("PUT", "/automation", { enabled } satisfies AutomationUpdate),
   press: (action: "play" | "pause") => request<void>("POST", `/player/${action}`),
+  recordingSteps: () => request<RecordingStepInfo[]>("GET", "/recording/steps"),
+  startRecordingStep: (index: number) => request<RecordingInfo>("POST", `/recording/steps/${index}`),
+  cancelRecordingStep: () => request<void>("DELETE", "/recording/current"),
+  finishRecording: () => request<void>("DELETE", "/recording"),
 };

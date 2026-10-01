@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import csv
 import logging
 import math
 import time
@@ -16,11 +15,12 @@ from eyes_on_screen.attention.calibration import (
     CalibrationSession,
     calibrate_center,
 )
-from eyes_on_screen.attention.classifier import Attention, classify
+from eyes_on_screen.attention.classifier import classify
 from eyes_on_screen.config import PoseConfig
 from eyes_on_screen.debug.overlay import HIGHLIGHT, MUTED, Line, View, rate, render
+from eyes_on_screen.recording import PoseRecorder
 from eyes_on_screen.video.source import VideoSource
-from eyes_on_screen.vision.analyzer import FaceAnalyzer, FaceObservation, Roi
+from eyes_on_screen.vision.analyzer import FaceAnalyzer, Roi
 from eyes_on_screen.vision.head_pose import HeadPose
 from eyes_on_screen.vision.target import select_target
 
@@ -59,7 +59,9 @@ def run_pose_view(
     last_render = 0.0
     view: View | None = None
     calibration: CalibrationSession | None = None
-    recorder = _Recorder(record) if record else None
+    recorder = PoseRecorder(record, time.monotonic()) if record else None
+    if recorder is not None:
+        log.info("Recording poses to %s", record)
     label = ""
 
     cv2.namedWindow(WINDOW, cv2.WINDOW_NORMAL)
@@ -134,66 +136,6 @@ def _calibration_text(session: CalibrationSession, now: float) -> str:
             f"calibration in {math.ceil(session.remaining_s(now))}s: sit down, look at the screen"
         )
     return "calibrating: keep looking at the screen"
-
-
-class _Recorder:
-    """Per-frame CSV of the target's pose, for tuning thresholds offline."""
-
-    def __init__(self, path: Path) -> None:
-        path.parent.mkdir(parents=True, exist_ok=True)
-        # Line-buffered: a killed or crashed session still leaves its rows on disk.
-        self._file = path.open("w", newline="", encoding="utf-8", buffering=1)
-        self._writer = csv.writer(self._file)
-        self._writer.writerow(
-            [
-                "t",
-                "faces",
-                "unconfirmed",
-                "score",
-                "yaw",
-                "pitch",
-                "roll",
-                "eye_down",
-                "eye_up",
-                "eye_closed",
-                "eye_squint",
-                "attention",
-                "label",
-            ]
-        )
-        self._t0 = time.monotonic()
-        log.info("Recording poses to %s", path)
-
-    def write(
-        self,
-        now: float,
-        faces: list[FaceObservation],
-        target: FaceObservation | None,
-        attention: Attention,
-        label: str,
-    ) -> None:
-        pose = target.pose if target else None
-        eyes = target.eyes if target else None
-        self._writer.writerow(
-            [
-                f"{now - self._t0:.2f}",
-                len(faces),
-                sum(face.pose is None for face in faces),
-                f"{target.score:.2f}" if target else "",
-                f"{pose.yaw:.1f}" if pose else "",
-                f"{pose.pitch:.1f}" if pose else "",
-                f"{pose.roll:.1f}" if pose else "",
-                f"{eyes.look_down:.3f}" if eyes else "",
-                f"{eyes.look_up:.3f}" if eyes else "",
-                f"{eyes.closed:.3f}" if eyes else "",
-                f"{eyes.squint:.3f}" if eyes else "",
-                attention.value,
-                label,
-            ]
-        )
-
-    def close(self) -> None:
-        self._file.close()
 
 
 def _finish_calibration(poses: list[HeadPose], pose: PoseConfig) -> PoseConfig:

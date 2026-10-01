@@ -2,6 +2,7 @@ import { useState } from "react";
 
 import { api } from "../api";
 import { run } from "../eos";
+import type { Page } from "../hooks/usePage";
 import { useEos } from "../store";
 import { Logo } from "./icons";
 
@@ -16,7 +17,7 @@ function Pill({ label, level, value }: { label: string; level: Level; value: str
   );
 }
 
-export function TopBar() {
+export function TopBar({ page }: { page: Page }) {
   const status = useEos((state) => state.status);
   // While a toggle is in flight, show what the user chose rather than the old status.
   const [pending, setPending] = useState<boolean | null>(null);
@@ -45,6 +46,14 @@ export function TopBar() {
           <div className="brand-sub">{subtitle}</div>
         </div>
       </div>
+      <nav className="tabs" aria-label="Pages">
+        <a href="#" className={page === "live" ? "on" : ""} aria-current={page === "live" ? "page" : undefined}>
+          Live
+        </a>
+        <a href="#record" className={page === "record" ? "on" : ""} aria-current={page === "record" ? "page" : undefined}>
+          Record
+        </a>
+      </nav>
       <div className="topbar-right">
         <Pill
           label="Camera"

@@ -172,6 +172,48 @@ export interface PoseConfig {
 }
 /**
  * This interface was referenced by `Protocol`'s JSON-Schema
+ * via the `definition` "RecordingInfo".
+ */
+export interface RecordingInfo {
+  file: string;
+  current: RecordingProgress | null;
+  done: RecordingResult[];
+  last: number | null;
+}
+/**
+ * This interface was referenced by `Protocol`'s JSON-Schema
+ * via the `definition` "RecordingProgress".
+ */
+export interface RecordingProgress {
+  index: number;
+  phase: "countdown" | "recording";
+  remaining_s: number;
+  phase_s: number;
+  frames: number;
+  with_face: number;
+}
+/**
+ * This interface was referenced by `Protocol`'s JSON-Schema
+ * via the `definition` "RecordingResult".
+ */
+export interface RecordingResult {
+  index: number;
+  take: number;
+  frames: number;
+  with_face: number;
+}
+/**
+ * This interface was referenced by `Protocol`'s JSON-Schema
+ * via the `definition` "RecordingStepInfo".
+ */
+export interface RecordingStepInfo {
+  label: string;
+  title: string;
+  instruction: string;
+  duration_s: number;
+}
+/**
+ * This interface was referenced by `Protocol`'s JSON-Schema
  * via the `definition` "RoomInfo".
  */
 export interface RoomInfo {
@@ -221,6 +263,7 @@ export interface StatusMessage {
   machine: MachineInfo;
   automation: AutomationInfo;
   calibration: CalibrationInfo | null;
+  recording: RecordingInfo | null;
   settings: SettingsInfo;
 }
 /**

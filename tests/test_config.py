@@ -43,6 +43,7 @@ def test_relative_paths_are_resolved_against_config_folder(tmp_path):
     assert config.detection.models_dir == base / "models"
     assert config.apple_tv.credentials_file == base / "data" / "pyatv.conf"
     assert config.logging.events_file == base / "logs" / "events.log"
+    assert config.logging.recordings_dir == base / "logs" / "recordings"
 
 
 def test_absolute_paths_are_kept(tmp_path):

@@ -82,3 +82,5 @@ logging:
   level: INFO  # DEBUG | INFO | WARNING | ERROR
   # Pause/resume events with reasons; set to null to disable the file.
   events_file: logs/events.log
+  # Guided gaze recordings from the web UI (CSV per session, for tuning thresholds).
+  recordings_dir: logs/recordings

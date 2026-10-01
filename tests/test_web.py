@@ -91,6 +91,20 @@ class FakeControls:
         if self.player_error:
             raise AppleTvError(self.player_error)
 
+    # Recording goes to the real app: it only writes a CSV under tmp_path.
+
+    def recording_steps(self):
+        return self.app.recording_steps()
+
+    def start_recording_step(self, index):
+        return self.app.start_recording_step(index)
+
+    def cancel_recording_step(self):
+        self.app.cancel_recording_step()
+
+    def finish_recording(self):
+        self.app.finish_recording()
+
 
 @contextlib.asynccontextmanager
 async def serving(server_config: WebConfig, controls) -> AsyncIterator[tuple[WebServer, str]]:
@@ -185,6 +199,37 @@ def test_rest_api(app):
             assert "not connected" in (await offline.json())["detail"]
 
     run(scenario)
+
+
+def test_recording_api(app):
+    async def scenario():
+        async with (
+            serving(WebConfig(port=free_port()), FakeControls(app)) as (_, url),
+            aiohttp.ClientSession(base_url=url) as http,
+        ):
+            steps = await (await http.get("/api/recording/steps")).json()
+            assert steps[0]["label"] == "screen"
+            assert {"title", "instruction", "duration_s"} <= set(steps[0])
+
+            started = await http.post("/api/recording/steps/0")
+            assert started.status == 200
+            info = await started.json()
+            assert info["current"]["phase"] == "countdown"
+            assert info["file"].startswith("logs/recordings/gaze-")
+
+            busy = await http.post("/api/recording/steps/1")
+            assert busy.status == 409
+            assert "still running" in (await busy.json())["detail"]
+            assert (await http.post(f"/api/recording/steps/{len(steps)}")).status == 404
+
+            assert (await http.delete("/api/recording/current")).status == 204
+            assert (await http.post("/api/recording/steps/1")).status == 200
+            assert (await http.delete("/api/recording")).status == 204
+
+    run(scenario)
+    assert app._recording is None
+    [saved] = (app._config_path.parent / "logs" / "recordings").glob("gaze-*.csv")
+    assert saved.read_text(encoding="utf-8").startswith("t,step,take,")
 
 
 def test_websocket_pushes_events_status_and_frames(app):
@@ -341,6 +386,17 @@ class TestAppControls:
     def test_player_buttons_need_the_apple_tv(self, app):
         with pytest.raises(AppleTvError, match="not connected"):
             asyncio.run(app.press("pause"))
+
+    def test_guided_recording_shows_in_the_status_until_finished(self, app):
+        app.start_recording_step(2)
+
+        recording = app.status().recording
+        assert recording is not None
+        assert recording.current is not None
+        assert (recording.current.index, recording.current.phase) == (2, "countdown")
+
+        app.finish_recording()
+        assert app.status().recording is None
 
     def test_status_serializes(self, app):
         status = app.status()
