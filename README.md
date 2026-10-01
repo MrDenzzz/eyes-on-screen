@@ -1,5 +1,7 @@
 # eyes-on-screen
 
+**English** | [Русский](README.ru.md)
+
 [![CI](https://github.com/MrDenzzz/eyes-on-screen/actions/workflows/ci.yml/badge.svg)](https://github.com/MrDenzzz/eyes-on-screen/actions/workflows/ci.yml)
 
 Pauses the Apple TV when you look away from the screen, and resumes when you look back.
