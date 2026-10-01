@@ -14,7 +14,7 @@ from typing import Literal
 import cv2
 import numpy as np
 
-from eyes_on_screen.appletv.controller import AppleTvController, AppleTvError
+from eyes_on_screen.appletv.controller import AppleTvController
 from eyes_on_screen.appletv.state import PlayerState
 from eyes_on_screen.attention.calibration import (
     CalibrationError,
@@ -33,18 +33,15 @@ from eyes_on_screen.vision.analyzer import FaceAnalyzer, FaceObservation
 from eyes_on_screen.vision.target import select_target
 from eyes_on_screen.web.messages import (
     AnalysisInfo,
-    AutomationCommand,
     AutomationInfo,
-    CalibrateCommand,
     CalibrationInfo,
     EventInfo,
     FaceInfo,
     FrameHeader,
     MachineInfo,
-    PageCommand,
     PlayerInfo,
     RoomInfo,
-    SetCommand,
+    SettingsChanges,
     SettingsInfo,
     StatusMessage,
     StreamInfo,
@@ -90,7 +87,7 @@ class App:
         self._player = AppleTvController(
             identifier, config.apple_tv.credentials_file, on_state=self._on_player
         )
-        self._web = WebServer(config.web, self._on_web_command) if config.web.enabled else None
+        self._web = WebServer(config.web, self) if config.web.enabled else None
         # MediaPipe and OpenCV work stays on one dedicated thread, off the event loop
         # that serves the Apple TV connection and the web UI.
         self._worker = ThreadPoolExecutor(max_workers=1, thread_name_prefix="analysis")
@@ -249,30 +246,40 @@ class App:
 
     # Web UI
 
-    async def _on_web_command(self, command: PageCommand) -> str | None:
-        """Run a validated command from the web UI; returns an error message or None."""
-        if isinstance(command, SetCommand):
-            changes = command.changes.as_changes()
-            try:
-                self._change_settings(changes)
-            except (SettingsError, OSError) as exc:
-                return str(exc)
-            summary = ", ".join(f"{s}.{k}" for s, values in changes.items() for k in values)
-            log.info("Settings changed from the web UI: %s", summary)
-        elif isinstance(command, CalibrateCommand):
-            self._calibration = CalibrationSession(
-                time.monotonic(), WEB_CALIBRATION_DELAY_S, CALIBRATION_DURATION_S
-            )
-        elif isinstance(command, AutomationCommand):
-            self._automation = command.enabled
-            events.info("automation %s from the web UI", "on" if command.enabled else "off")
-        else:
-            try:
-                await (self._player.play() if command.action == "play" else self._player.pause())
-            except AppleTvError as exc:
-                return str(exc)
-            events.info("%s pressed in the web UI", command.action)
-        return None
+    # Controls for the web UI (see web/server.py)
+
+    def status(self) -> StatusMessage:
+        return self._status()
+
+    def change_settings(self, changes: SettingsChanges) -> SettingsInfo:
+        """Validate, persist to config.yaml and apply live; raises SettingsError."""
+        as_dict = changes.as_changes()
+        try:
+            self._change_settings(as_dict)
+        except OSError as exc:
+            raise SettingsError(f"cannot save {self._config_path}: {exc}") from exc
+        summary = ", ".join(f"{s}.{k}" for s, values in as_dict.items() for k in values)
+        log.info("Settings changed from the web UI: %s", summary)
+        return self._settings_info()
+
+    def start_calibration(self) -> None:
+        self._calibration = CalibrationSession(
+            time.monotonic(), WEB_CALIBRATION_DELAY_S, CALIBRATION_DURATION_S
+        )
+
+    def set_automation(self, enabled: bool) -> AutomationInfo:
+        if enabled != self._automation:
+            self._automation = enabled
+            events.info("automation %s from the web UI", "on" if enabled else "off")
+        return AutomationInfo(enabled=self._automation, dry_run=self._dry_run)
+
+    async def press(self, action: Literal["play", "pause"]) -> None:
+        await (self._player.play() if action == "play" else self._player.pause())
+        events.info("%s pressed in the web UI", action)
+
+    def _settings_info(self) -> SettingsInfo:
+        config = self._config
+        return SettingsInfo(roi=config.target.roi, pose=config.pose, behavior=config.behavior)
 
     async def _publish_frame(
         self,
@@ -307,7 +314,6 @@ class App:
         machine = self._machine.status(now)
         player = self._player.state
         calibration = self._calibration
-        config = self._config
         return StatusMessage(
             stream=StreamInfo(
                 connected=stats.connected,
@@ -347,9 +353,7 @@ class App:
                 if calibration.counting_down(now)
                 else calibration.duration_s,
             ),
-            settings=SettingsInfo(
-                roi=config.target.roi, pose=config.pose, behavior=config.behavior
-            ),
+            settings=self._settings_info(),
         )
 
     # Debug window

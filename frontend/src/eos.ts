@@ -1,7 +1,7 @@
-import { type Command, Connection } from "./connection";
+import { Connection } from "./connection";
 import { addEvents, applyFrame, applyStatus, setOnline, toast } from "./store";
 
-/** The app's single connection, feeding the store. */
+/** The app's single push connection, feeding the store. */
 export const connection = new Connection({
   online: setOnline,
   status: applyStatus,
@@ -13,10 +13,10 @@ export const connection = new Connection({
   },
 });
 
-/** Sends a command; on failure shows `what: reason` and resolves to false. */
-export async function send(command: Command, what: string): Promise<boolean> {
+/** Runs an API call; on failure shows `what: reason` and resolves to false. */
+export async function run(call: Promise<unknown>, what: string): Promise<boolean> {
   try {
-    await connection.send(command);
+    await call;
     return true;
   } catch (error) {
     toast(`${what}: ${(error as Error).message}`, true);

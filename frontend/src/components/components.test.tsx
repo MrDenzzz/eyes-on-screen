@@ -6,12 +6,17 @@ import { makeStatus } from "../test/fixtures";
 import { PlayerCard } from "./PlayerCard";
 import { SettingsCard } from "./SettingsCard";
 
-const send = vi.hoisted(() => vi.fn(async () => true));
-vi.mock("../eos", () => ({ send }));
+const api = vi.hoisted(() => ({
+  changeSettings: vi.fn(async () => undefined),
+  calibrate: vi.fn(async () => undefined),
+  setAutomation: vi.fn(async () => undefined),
+  press: vi.fn(async () => undefined),
+}));
+vi.mock("../api", () => ({ api }));
 
 beforeEach(() => {
   useEos.setState(initialState, true);
-  send.mockClear();
+  for (const call of Object.values(api)) call.mockClear();
 });
 afterEach(cleanup);
 
@@ -31,7 +36,7 @@ describe("SettingsCard", () => {
 
     fireEvent.click(screen.getByRole("radio", { name: "All away" }));
 
-    expect(send).toHaveBeenCalledWith({ cmd: "set", changes: { behavior: { multiple_viewers: "all_away" } } }, "Not saved");
+    expect(api.changeSettings).toHaveBeenCalledWith({ behavior: { multiple_viewers: "all_away" } });
   });
 
   it("saves a slider once the user stops moving it", () => {
@@ -42,11 +47,11 @@ describe("SettingsCard", () => {
     const slider = screen.getByRole("slider", { name: "Pause after looking away" });
     fireEvent.change(slider, { target: { value: "2" } });
     fireEvent.change(slider, { target: { value: "2.5" } });
-    expect(send).not.toHaveBeenCalled();
+    expect(api.changeSettings).not.toHaveBeenCalled();
     act(() => void vi.advanceTimersByTime(400));
 
-    expect(send).toHaveBeenCalledTimes(1);
-    expect(send).toHaveBeenCalledWith({ cmd: "set", changes: { behavior: { pause_after_s: 2.5 } } }, "Not saved");
+    expect(api.changeSettings).toHaveBeenCalledTimes(1);
+    expect(api.changeSettings).toHaveBeenCalledWith({ behavior: { pause_after_s: 2.5 } });
     vi.useRealTimers();
   });
 
@@ -81,6 +86,6 @@ describe("PlayerCard", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Pause" }));
 
-    expect(send).toHaveBeenCalledWith({ cmd: "player", action: "pause" }, "Pause");
+    expect(api.press).toHaveBeenCalledWith("pause");
   });
 });

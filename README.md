@@ -48,10 +48,13 @@ with its comments intact.
 To open it from another device (a laptop on the sofa), set `web.host: 0.0.0.0` and a
 `web.password`: the page shows a live camera, so it never goes on the network without one.
 
-The UI is a React + TypeScript app in `frontend/` (Vite, zustand, Vitest). Its build is
-committed to `src/eyes_on_screen/web/static`, so running eos needs no Node.js. The
-WebSocket protocol is defined once, as pydantic models in `web/messages.py`; their JSON
-Schema generates the TypeScript types, and a test fails when the two drift apart.
+The backend is FastAPI on uvicorn, embedded in eos's own event loop: REST under `/api`
+for commands (OpenAPI docs at <http://127.0.0.1:8765/api/docs>) and a push-only
+WebSocket for status, video frames and events. The UI is a React + TypeScript app in
+`frontend/` (Vite, zustand, Vitest); its build is committed to
+`src/eyes_on_screen/web/static`, so running eos needs no Node.js. Messages are defined
+once, as pydantic models in `web/messages.py`; their JSON Schema generates the
+TypeScript types, and a test fails when the two drift apart.
 
 ## Development
 

@@ -26,35 +26,6 @@
       "title": "Attention",
       "type": "string"
     },
-    "AutomationCommand": {
-      "additionalProperties": false,
-      "properties": {
-        "cmd": {
-          "const": "automation",
-          "type": "string"
-        },
-        "id": {
-          "anyOf": [
-            {
-              "type": "integer"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null
-        },
-        "enabled": {
-          "type": "boolean"
-        }
-      },
-      "required": [
-        "cmd",
-        "enabled"
-      ],
-      "title": "AutomationCommand",
-      "type": "object"
-    },
     "AutomationInfo": {
       "additionalProperties": false,
       "properties": {
@@ -70,6 +41,19 @@
         "dry_run"
       ],
       "title": "AutomationInfo",
+      "type": "object"
+    },
+    "AutomationUpdate": {
+      "additionalProperties": false,
+      "properties": {
+        "enabled": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "enabled"
+      ],
+      "title": "AutomationUpdate",
       "type": "object"
     },
     "BehaviorChanges": {
@@ -167,31 +151,6 @@
         "multiple_viewers"
       ],
       "title": "BehaviorConfig",
-      "type": "object"
-    },
-    "CalibrateCommand": {
-      "additionalProperties": false,
-      "properties": {
-        "cmd": {
-          "const": "calibrate",
-          "type": "string"
-        },
-        "id": {
-          "anyOf": [
-            {
-              "type": "integer"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null
-        }
-      },
-      "required": [
-        "cmd"
-      ],
-      "title": "CalibrateCommand",
       "type": "object"
     },
     "CalibrationInfo": {
@@ -435,43 +394,6 @@
       "title": "MultipleViewers",
       "type": "string"
     },
-    "PageCommandEnvelope": {
-      "additionalProperties": false,
-      "description": "Only carries PageCommand into the schema (a union is not a model of its own).",
-      "properties": {
-        "command": {
-          "discriminator": {
-            "mapping": {
-              "automation": "#/$defs/AutomationCommand",
-              "calibrate": "#/$defs/CalibrateCommand",
-              "player": "#/$defs/PlayerCommand",
-              "set": "#/$defs/SetCommand"
-            },
-            "propertyName": "cmd"
-          },
-          "oneOf": [
-            {
-              "$ref": "#/$defs/SetCommand"
-            },
-            {
-              "$ref": "#/$defs/CalibrateCommand"
-            },
-            {
-              "$ref": "#/$defs/AutomationCommand"
-            },
-            {
-              "$ref": "#/$defs/PlayerCommand"
-            }
-          ],
-          "title": "PageCommand"
-        }
-      },
-      "required": [
-        "command"
-      ],
-      "title": "PageCommandEnvelope",
-      "type": "object"
-    },
     "Playback": {
       "enum": [
         "playing",
@@ -492,39 +414,6 @@
       ],
       "title": "PlaybackCommand",
       "type": "string"
-    },
-    "PlayerCommand": {
-      "additionalProperties": false,
-      "properties": {
-        "cmd": {
-          "const": "player",
-          "type": "string"
-        },
-        "id": {
-          "anyOf": [
-            {
-              "type": "integer"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null
-        },
-        "action": {
-          "enum": [
-            "play",
-            "pause"
-          ],
-          "type": "string"
-        }
-      },
-      "required": [
-        "cmd",
-        "action"
-      ],
-      "title": "PlayerCommand",
-      "type": "object"
     },
     "PlayerInfo": {
       "additionalProperties": false,
@@ -671,48 +560,6 @@
       "title": "PoseConfig",
       "type": "object"
     },
-    "ReplyMessage": {
-      "additionalProperties": false,
-      "properties": {
-        "type": {
-          "const": "reply",
-          "default": "reply",
-          "type": "string"
-        },
-        "id": {
-          "anyOf": [
-            {
-              "type": "integer"
-            },
-            {
-              "type": "null"
-            }
-          ]
-        },
-        "ok": {
-          "type": "boolean"
-        },
-        "error": {
-          "anyOf": [
-            {
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null
-        }
-      },
-      "required": [
-        "type",
-        "id",
-        "ok",
-        "error"
-      ],
-      "title": "ReplyMessage",
-      "type": "object"
-    },
     "RoomInfo": {
       "additionalProperties": false,
       "properties": {
@@ -732,35 +579,6 @@
         "looking"
       ],
       "title": "RoomInfo",
-      "type": "object"
-    },
-    "SetCommand": {
-      "additionalProperties": false,
-      "properties": {
-        "cmd": {
-          "const": "set",
-          "type": "string"
-        },
-        "id": {
-          "anyOf": [
-            {
-              "type": "integer"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null
-        },
-        "changes": {
-          "$ref": "#/$defs/SettingsChanges"
-        }
-      },
-      "required": [
-        "cmd",
-        "changes"
-      ],
-      "title": "SetCommand",
       "type": "object"
     },
     "SettingsChanges": {

@@ -11,7 +11,10 @@ export default defineConfig({
   },
   server: {
     // `npm run dev` with hot reload, talking to a running `eos run`.
-    proxy: { "/ws": { target: "ws://127.0.0.1:8765", ws: true } },
+    proxy: {
+      "/api": "http://127.0.0.1:8765",
+      "/ws": { target: "ws://127.0.0.1:8765", ws: true },
+    },
   },
   test: {
     environment: "jsdom",

@@ -1,6 +1,7 @@
 import { useState } from "react";
 
-import { send } from "../eos";
+import { api } from "../api";
+import { run } from "../eos";
 import { useEos } from "../store";
 import { Logo } from "./icons";
 
@@ -31,7 +32,7 @@ export function TopBar() {
 
   async function toggle(enabled: boolean) {
     setPending(enabled);
-    await send({ cmd: "automation", enabled }, "Automation");
+    await run(api.setAutomation(enabled), "Automation");
     setPending(null);
   }
 

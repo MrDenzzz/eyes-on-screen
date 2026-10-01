@@ -1,7 +1,8 @@
 import { type PointerEvent, useLayoutEffect, useRef, useState } from "react";
 
 import { drawVideo, type Roi, toFramePoint, type Viewport } from "../canvas/video";
-import { send } from "../eos";
+import { api } from "../api";
+import { run } from "../eos";
 import { useResizeTick } from "../hooks/useResizeTick";
 import { describeNow } from "../lib/now";
 import type { CalibrationInfo, StatusMessage } from "../protocol/types";
@@ -59,7 +60,7 @@ export function VideoStage() {
   async function saveZone() {
     if (!draft) return;
     const rounded = draft.map((value) => Math.round(value * 1000) / 1000) as Roi;
-    if (await send({ cmd: "set", changes: { target: { roi: rounded } } }, "Zone not saved")) {
+    if (await run(api.changeSettings({ target: { roi: rounded } }), "Zone not saved")) {
       stopEditing();
     }
   }
@@ -97,7 +98,7 @@ export function VideoStage() {
             type="button"
             className={`tool${status?.calibration ? " active" : ""}`}
             title="Look at the screen to set what counts as watching"
-            onClick={() => void send({ cmd: "calibrate" }, "Calibration")}
+            onClick={() => void run(api.calibrate(), "Calibration")}
           >
             <TargetIcon />
             Calibrate

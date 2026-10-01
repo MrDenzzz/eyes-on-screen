@@ -1,7 +1,9 @@
 """Messages between `eos run` and the web UI, as pydantic models.
 
-They are the single source of truth for the protocol: the server builds and validates
-messages with them, and their JSON Schema is turned into the frontend's TypeScript
+The WebSocket pushes StatusMessage, binary frames (FrameHeader + JPEG) and
+EventsMessage; the REST API (web/server.py) takes SettingsChanges and AutomationUpdate.
+These models are the single source of truth: FastAPI validates requests and documents
+them (OpenAPI at /api/docs), and their JSON Schema becomes the frontend's TypeScript
 types (`frontend/src/protocol`). Regenerate after a change:
 
     uv run python -m eyes_on_screen.web.messages frontend/src/protocol/schema.json
@@ -13,9 +15,9 @@ from __future__ import annotations
 import json
 import sys
 from pathlib import Path
-from typing import Annotated, Any, Literal
+from typing import Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, TypeAdapter, create_model
+from pydantic import BaseModel, ConfigDict, create_model
 from pydantic.json_schema import models_json_schema
 
 from eyes_on_screen.appletv.state import Playback
@@ -132,14 +134,7 @@ class EventsMessage(_Message):
     events: list[EventInfo]
 
 
-class ReplyMessage(_Message):
-    type: Literal["reply"] = "reply"
-    id: int | None
-    ok: bool
-    error: str | None = None
-
-
-# Page -> server
+# Page -> server (REST request bodies)
 
 
 def _partial(name: str, model: type[BaseModel], keys: set[str]) -> type[BaseModel]:
@@ -172,46 +167,14 @@ class SettingsChanges(_Message):
         }
 
 
-class SetCommand(_Message):
-    cmd: Literal["set"]
-    id: int | None = None
-    changes: SettingsChanges
-
-
-class CalibrateCommand(_Message):
-    cmd: Literal["calibrate"]
-    id: int | None = None
-
-
-class AutomationCommand(_Message):
-    cmd: Literal["automation"]
-    id: int | None = None
+class AutomationUpdate(_Message):
     enabled: bool
-
-
-class PlayerCommand(_Message):
-    cmd: Literal["player"]
-    id: int | None = None
-    action: Literal["play", "pause"]
-
-
-PageCommand = Annotated[
-    SetCommand | CalibrateCommand | AutomationCommand | PlayerCommand,
-    Field(discriminator="cmd", title="PageCommand"),
-]
-COMMAND_ADAPTER: TypeAdapter[PageCommand] = TypeAdapter(PageCommand)
-
-
-class PageCommandEnvelope(_Message):
-    """Only carries PageCommand into the schema (a union is not a model of its own)."""
-
-    command: PageCommand
 
 
 def protocol_schema() -> dict[str, Any]:
     """One JSON Schema with every message, shaped for json-schema-to-typescript.
 
-    Server messages use the serialization schema (what is actually sent), page commands
+    Server messages use the serialization schema (what is actually sent), request bodies
     the validation one (optional fields stay optional). Property titles and defaults
     next to $refs are dropped so the generator does not emit an alias per field or
     duplicate enums, and 2020-12 `prefixItems` tuples are rewritten to the draft-07
@@ -222,8 +185,8 @@ def protocol_schema() -> dict[str, Any]:
             (StatusMessage, "serialization"),
             (FrameHeader, "serialization"),
             (EventsMessage, "serialization"),
-            (ReplyMessage, "serialization"),
-            (PageCommandEnvelope, "validation"),
+            (SettingsChanges, "validation"),
+            (AutomationUpdate, "validation"),
         ],
         title="Protocol",
     )
@@ -245,8 +208,7 @@ def _for_json2ts(node: Any) -> Any:
         node["additionalItems"] = False
     if isinstance(node.get("properties"), dict):
         for prop in node["properties"].values():
-            # Unions keep their title: it names the generated type (PageCommand).
-            if isinstance(prop, dict) and "discriminator" not in prop:
+            if isinstance(prop, dict):
                 prop.pop("title", None)
     return node
 

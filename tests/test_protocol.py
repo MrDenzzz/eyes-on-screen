@@ -20,10 +20,16 @@ def test_frontend_schema_matches_the_python_messages():
 
 
 def test_schema_is_shaped_for_the_typescript_generator():
-    text = json.dumps(protocol_schema())
+    schema = protocol_schema()
 
-    assert "prefixItems" not in text  # tuples in the draft-07 form json2ts understands
-    assert '"title": "PageCommand"' in text  # the union keeps its name
+    assert "prefixItems" not in json.dumps(schema)  # draft-07 tuples json2ts understands
+    assert {
+        "StatusMessage",
+        "FrameHeader",
+        "EventsMessage",
+        "SettingsChanges",
+        "AutomationUpdate",
+    } <= set(schema["$defs"])
 
 
 def test_settings_changes_only_carry_what_was_sent():

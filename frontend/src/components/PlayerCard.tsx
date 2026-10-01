@@ -1,4 +1,5 @@
-import { send } from "../eos";
+import { api } from "../api";
+import { run } from "../eos";
 import { useEos } from "../store";
 import { PauseIcon, PlayIcon } from "./icons";
 
@@ -36,7 +37,7 @@ export function PlayerCard() {
             type="button"
             className="btn"
             disabled={!connected || playback !== "playing"}
-            onClick={() => void send({ cmd: "player", action: "pause" }, "Pause")}
+            onClick={() => void run(api.press("pause"), "Pause")}
           >
             <PauseIcon />
             Pause
@@ -45,7 +46,7 @@ export function PlayerCard() {
             type="button"
             className="btn"
             disabled={!connected || playback !== "paused"}
-            onClick={() => void send({ cmd: "player", action: "play" }, "Play")}
+            onClick={() => void run(api.press("play"), "Play")}
           >
             <PlayIcon />
             Play

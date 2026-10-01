@@ -20,7 +20,6 @@ export type FaceLostAction = "pause" | "ignore";
  * via the `definition` "PlaybackCommand".
  */
 export type PlaybackCommand = "pause" | "resume";
-export type PageCommand = SetCommand | CalibrateCommand | AutomationCommand | PlayerCommand;
 /**
  * This interface was referenced by `Protocol`'s JSON-Schema
  * via the `definition` "Playback".
@@ -38,20 +37,18 @@ export interface AnalysisInfo {
 }
 /**
  * This interface was referenced by `Protocol`'s JSON-Schema
- * via the `definition` "AutomationCommand".
- */
-export interface AutomationCommand {
-  cmd: "automation";
-  id?: number | null;
-  enabled: boolean;
-}
-/**
- * This interface was referenced by `Protocol`'s JSON-Schema
  * via the `definition` "AutomationInfo".
  */
 export interface AutomationInfo {
   enabled: boolean;
   dry_run: boolean;
+}
+/**
+ * This interface was referenced by `Protocol`'s JSON-Schema
+ * via the `definition` "AutomationUpdate".
+ */
+export interface AutomationUpdate {
+  enabled: boolean;
 }
 /**
  * This interface was referenced by `Protocol`'s JSON-Schema
@@ -74,14 +71,6 @@ export interface BehaviorConfig {
   on_face_lost: FaceLostAction;
   face_lost_after_s: number;
   multiple_viewers: MultipleViewers;
-}
-/**
- * This interface was referenced by `Protocol`'s JSON-Schema
- * via the `definition` "CalibrateCommand".
- */
-export interface CalibrateCommand {
-  cmd: "calibrate";
-  id?: number | null;
 }
 /**
  * This interface was referenced by `Protocol`'s JSON-Schema
@@ -150,22 +139,44 @@ export interface MachineInfo {
   pending: PlaybackCommand | null;
 }
 /**
- * Only carries PageCommand into the schema (a union is not a model of its own).
- *
  * This interface was referenced by `Protocol`'s JSON-Schema
- * via the `definition` "PageCommandEnvelope".
+ * via the `definition` "PlayerInfo".
  */
-export interface PageCommandEnvelope {
-  command: PageCommand;
+export interface PlayerInfo {
+  connected: boolean;
+  name: string | null;
+  playback: Playback | null;
+  app: string | null;
+  title: string | null;
 }
 /**
  * This interface was referenced by `Protocol`'s JSON-Schema
- * via the `definition` "SetCommand".
+ * via the `definition` "PoseChanges".
  */
-export interface SetCommand {
-  cmd: "set";
-  id?: number | null;
-  changes: SettingsChanges;
+export interface PoseChanges {
+  pitch_center_deg?: number | null;
+  pitch_tolerance_deg?: number | null;
+  yaw_center_deg?: number | null;
+  yaw_tolerance_deg?: number | null;
+}
+/**
+ * This interface was referenced by `Protocol`'s JSON-Schema
+ * via the `definition` "PoseConfig".
+ */
+export interface PoseConfig {
+  yaw_center_deg: number;
+  pitch_center_deg: number;
+  yaw_tolerance_deg: number;
+  pitch_tolerance_deg: number;
+}
+/**
+ * This interface was referenced by `Protocol`'s JSON-Schema
+ * via the `definition` "RoomInfo".
+ */
+export interface RoomInfo {
+  attention: Attention;
+  viewers: number;
+  looking: number;
 }
 /**
  * This interface was referenced by `Protocol`'s JSON-Schema
@@ -182,65 +193,6 @@ export interface SettingsChanges {
  */
 export interface TargetChanges {
   roi?: [number, number, number, number] | null;
-}
-/**
- * This interface was referenced by `Protocol`'s JSON-Schema
- * via the `definition` "PoseChanges".
- */
-export interface PoseChanges {
-  pitch_center_deg?: number | null;
-  pitch_tolerance_deg?: number | null;
-  yaw_center_deg?: number | null;
-  yaw_tolerance_deg?: number | null;
-}
-/**
- * This interface was referenced by `Protocol`'s JSON-Schema
- * via the `definition` "PlayerCommand".
- */
-export interface PlayerCommand {
-  cmd: "player";
-  id?: number | null;
-  action: "play" | "pause";
-}
-/**
- * This interface was referenced by `Protocol`'s JSON-Schema
- * via the `definition` "PlayerInfo".
- */
-export interface PlayerInfo {
-  connected: boolean;
-  name: string | null;
-  playback: Playback | null;
-  app: string | null;
-  title: string | null;
-}
-/**
- * This interface was referenced by `Protocol`'s JSON-Schema
- * via the `definition` "PoseConfig".
- */
-export interface PoseConfig {
-  yaw_center_deg: number;
-  pitch_center_deg: number;
-  yaw_tolerance_deg: number;
-  pitch_tolerance_deg: number;
-}
-/**
- * This interface was referenced by `Protocol`'s JSON-Schema
- * via the `definition` "ReplyMessage".
- */
-export interface ReplyMessage {
-  type: "reply";
-  id: number | null;
-  ok: boolean;
-  error: string | null;
-}
-/**
- * This interface was referenced by `Protocol`'s JSON-Schema
- * via the `definition` "RoomInfo".
- */
-export interface RoomInfo {
-  attention: Attention;
-  viewers: number;
-  looking: number;
 }
 /**
  * This interface was referenced by `Protocol`'s JSON-Schema

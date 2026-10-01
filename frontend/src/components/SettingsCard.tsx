@@ -1,6 +1,7 @@
 import { type CSSProperties, useEffect, useRef, useState } from "react";
 
-import { send } from "../eos";
+import { api } from "../api";
+import { run } from "../eos";
 import { seconds, signed } from "../lib/format";
 import type { FaceLostAction, MultipleViewers, SettingsChanges } from "../protocol/types";
 import { useEos } from "../store";
@@ -110,7 +111,7 @@ export function SettingsCard() {
   const [saved, flashSaved] = useSavedFlash();
 
   async function save(changes: SettingsChanges): Promise<boolean> {
-    const ok = await send({ cmd: "set", changes }, "Not saved");
+    const ok = await run(api.changeSettings(changes), "Not saved");
     if (ok) flashSaved();
     return ok;
   }
