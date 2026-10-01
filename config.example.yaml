@@ -53,6 +53,15 @@ apple_tv:
   # Where pyatv keeps pairing credentials. Git-ignored - never commit it.
   credentials_file: data/pyatv.conf
 
+go2rtc:
+  # Start go2rtc together with eos when it is not running yet, restart it if it
+  # crashes and stop it on exit. Used only with video.source: rtsp on this machine.
+  autostart: true
+  binary: go2rtc/go2rtc.exe
+  config_file: go2rtc/go2rtc.yaml
+  # go2rtc's own output; set to null to discard it.
+  log_file: logs/go2rtc.log
+
 logging:
   level: INFO  # DEBUG | INFO | WARNING | ERROR
   # Pause/resume events with reasons; set to null to disable the file.

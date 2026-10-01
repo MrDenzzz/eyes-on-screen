@@ -30,7 +30,7 @@ Remove-Item go2rtc\go2rtc_win64.zip
 Copy-Item go2rtc\go2rtc.example.yaml go2rtc\go2rtc.yaml
 ```
 
-Start it and keep the window open:
+For the first setup, start it by hand and keep the window open:
 
 ```powershell
 cd go2rtc
@@ -39,6 +39,11 @@ cd go2rtc
 
 go2rtc reads `go2rtc.yaml` from the current folder; the log shows `config path=...` and
 `[api] listen addr=127.0.0.1:1984`. The example config keeps every port on `127.0.0.1`.
+
+Afterwards there is no need to start it yourself: with `go2rtc.autostart: true` in
+`config.yaml`, every `eos` command that reads the camera starts go2rtc in the background
+(unless one is already running), restarts it if it crashes and stops it on exit. Its
+output goes to `logs/go2rtc.log`.
 
 ## 2. Add the camera
 

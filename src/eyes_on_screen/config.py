@@ -5,6 +5,7 @@ from __future__ import annotations
 from enum import StrEnum
 from pathlib import Path
 from typing import Literal
+from urllib.parse import urlsplit
 
 import yaml
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator, model_validator
@@ -111,6 +112,16 @@ class LoggingConfig(_Section):
         return value.upper() if isinstance(value, str) else value
 
 
+class Go2rtcConfig(_Section):
+    autostart: bool = False
+    binary: Path = Path("go2rtc/go2rtc.exe")
+    config_file: Path = Path("go2rtc/go2rtc.yaml")
+    log_file: Path | None = Path("logs/go2rtc.log")
+
+
+_LOCAL_HOSTS = {"127.0.0.1", "localhost", "::1"}
+
+
 class AppConfig(_Section):
     video: VideoConfig
     detection: DetectionConfig = Field(default_factory=DetectionConfig)
@@ -118,7 +129,19 @@ class AppConfig(_Section):
     pose: PoseConfig = Field(default_factory=PoseConfig)
     behavior: BehaviorConfig = Field(default_factory=BehaviorConfig)
     apple_tv: AppleTvConfig = Field(default_factory=AppleTvConfig)
+    go2rtc: Go2rtcConfig = Field(default_factory=Go2rtcConfig)
     logging: LoggingConfig = Field(default_factory=LoggingConfig)
+
+    @model_validator(mode="after")
+    def _check_go2rtc_is_local(self) -> AppConfig:
+        if self.go2rtc.autostart and self.video.source is VideoSourceKind.RTSP:
+            host = urlsplit(self.video.rtsp_url or "").hostname
+            if host not in _LOCAL_HOSTS:
+                raise ValueError(
+                    f"go2rtc.autostart starts go2rtc on this machine, but video.rtsp_url "
+                    f"points at {host}; use 127.0.0.1 or set go2rtc.autostart: false"
+                )
+        return self
 
     def with_paths_relative_to(self, base_dir: Path) -> AppConfig:
         """Return a copy where every relative path is anchored to `base_dir`."""
@@ -126,7 +149,9 @@ class AppConfig(_Section):
         def anchor(path: Path) -> Path:
             return path if path.is_absolute() else (base_dir / path).resolve()
 
-        events_file = self.logging.events_file
+        def anchor_optional(path: Path | None) -> Path | None:
+            return anchor(path) if path else None
+
         return self.model_copy(
             update={
                 "detection": self.detection.model_copy(
@@ -135,8 +160,15 @@ class AppConfig(_Section):
                 "apple_tv": self.apple_tv.model_copy(
                     update={"credentials_file": anchor(self.apple_tv.credentials_file)}
                 ),
+                "go2rtc": self.go2rtc.model_copy(
+                    update={
+                        "binary": anchor(self.go2rtc.binary),
+                        "config_file": anchor(self.go2rtc.config_file),
+                        "log_file": anchor_optional(self.go2rtc.log_file),
+                    }
+                ),
                 "logging": self.logging.model_copy(
-                    update={"events_file": anchor(events_file) if events_file else None}
+                    update={"events_file": anchor_optional(self.logging.events_file)}
                 ),
             }
         )

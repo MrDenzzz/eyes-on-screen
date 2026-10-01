@@ -97,6 +97,12 @@ def test_log_level_is_case_insensitive(tmp_path):
             MINIMAL + "behavior: {pause_after_s: 0}", "behavior.pause_after_s", id="zero-delay"
         ),
         pytest.param(MINIMAL + "behaviour: {}", "behaviour", id="typo-in-section"),
+        pytest.param(
+            "video: {source: rtsp, rtsp_url: 'rtsp://10.0.0.5:8554/cam'}\n"
+            "go2rtc: {autostart: true}",
+            "<root>",
+            id="go2rtc-autostart-for-remote-stream",
+        ),
         pytest.param(MINIMAL + "pose: {yaw_tolerence_deg: 5}", "pose.yaw_tolerence_deg", id="typo"),
     ],
 )
