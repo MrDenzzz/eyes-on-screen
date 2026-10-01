@@ -46,6 +46,18 @@ class TestSelectTarget:
 
         assert select_target([small, large]) is large
 
+    def test_face_with_landmarks_beats_a_larger_one_without(self):
+        # e.g. a cat printed on a pillow next to the viewer
+        viewer = face(yaw=0, box=(0.1, 0.1, 0.15, 0.15))
+        pillow_cat = face(yaw=None, box=(0.5, 0.1, 0.7, 0.3))
+
+        assert select_target([pillow_cat, viewer]) is viewer
+
+    def test_face_without_landmarks_is_used_when_it_is_the_only_one(self):
+        turned_away = face(yaw=None)
+
+        assert select_target([turned_away]) is turned_away
+
     def test_no_faces_no_target(self):
         assert select_target([]) is None
 

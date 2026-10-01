@@ -140,7 +140,9 @@ class _Recorder:
         # Line-buffered: a killed or crashed session still leaves its rows on disk.
         self._file = path.open("w", newline="", encoding="utf-8", buffering=1)
         self._writer = csv.writer(self._file)
-        self._writer.writerow(["t", "faces", "score", "yaw", "pitch", "roll", "attention"])
+        self._writer.writerow(
+            ["t", "faces", "unconfirmed", "score", "yaw", "pitch", "roll", "attention"]
+        )
         self._t0 = time.monotonic()
         log.info("Recording poses to %s", path)
 
@@ -156,6 +158,7 @@ class _Recorder:
             [
                 f"{now - self._t0:.2f}",
                 len(faces),
+                sum(face.pose is None for face in faces),
                 f"{target.score:.2f}" if target else "",
                 f"{pose.yaw:.1f}" if pose else "",
                 f"{pose.pitch:.1f}" if pose else "",
