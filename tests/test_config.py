@@ -103,6 +103,7 @@ def test_log_level_is_case_insensitive(tmp_path):
             "<root>",
             id="go2rtc-autostart-for-remote-stream",
         ),
+        pytest.param(MINIMAL + "web: {host: 0.0.0.0}", "web", id="web-on-network-without-password"),
         pytest.param(MINIMAL + "pose: {yaw_tolerence_deg: 5}", "pose.yaw_tolerence_deg", id="typo"),
     ],
 )

@@ -67,6 +67,17 @@ go2rtc:
   # go2rtc's own output; set to null to discard it.
   log_file: logs/go2rtc.log
 
+web:
+  # Web UI served by `eos run`: live video, viewers, player state, settings.
+  enabled: true
+  # 127.0.0.1 - this PC only. 0.0.0.0 - any device on the home network
+  # (e.g. a laptop on the sofa); then a password is required.
+  host: 127.0.0.1
+  port: 8765
+  password: ""
+  jpeg_quality: 75
+  max_width: 1280
+
 logging:
   level: INFO  # DEBUG | INFO | WARNING | ERROR
   # Pause/resume events with reasons; set to null to disable the file.

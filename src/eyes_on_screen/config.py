@@ -132,6 +132,29 @@ class Go2rtcConfig(_Section):
 _LOCAL_HOSTS = {"127.0.0.1", "localhost", "::1"}
 
 
+class WebConfig(_Section):
+    enabled: bool = True
+    host: str = "127.0.0.1"
+    port: int = Field(default=8765, ge=1, le=65535)
+    password: str | None = None
+    jpeg_quality: int = Field(default=75, ge=30, le=95)
+    max_width: int = Field(default=1280, ge=320, le=3840)
+
+    @field_validator("password", mode="before")
+    @classmethod
+    def _blank_to_none(cls, value: object) -> object:
+        if isinstance(value, str):
+            return value or None
+        return value
+
+    @model_validator(mode="after")
+    def _require_password_off_localhost(self) -> WebConfig:
+        # It is a live camera of a living room: never on the network without a password.
+        if self.enabled and self.host not in _LOCAL_HOSTS and not self.password:
+            raise ValueError(f"password is required when host is {self.host!r}")
+        return self
+
+
 class AppConfig(_Section):
     video: VideoConfig
     detection: DetectionConfig = Field(default_factory=DetectionConfig)
@@ -140,6 +163,7 @@ class AppConfig(_Section):
     behavior: BehaviorConfig = Field(default_factory=BehaviorConfig)
     apple_tv: AppleTvConfig = Field(default_factory=AppleTvConfig)
     go2rtc: Go2rtcConfig = Field(default_factory=Go2rtcConfig)
+    web: WebConfig = Field(default_factory=WebConfig)
     logging: LoggingConfig = Field(default_factory=LoggingConfig)
 
     @model_validator(mode="after")

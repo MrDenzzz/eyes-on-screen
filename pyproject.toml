@@ -5,6 +5,7 @@ description = "Pauses Apple TV when the viewer looks away from the screen and re
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
+    "aiohttp>=3.14.3",
     "mediapipe>=1.0.1",
     "numpy>=2.5.3",
     # mediapipe already depends on the contrib build; never add opencv-python next to it,
@@ -13,6 +14,7 @@ dependencies = [
     "pyatv>=0.18.0",
     "pydantic>=2.13.5",
     "pyyaml>=6.0.3",
+    "ruamel-yaml>=0.19.1",
     "tabulate>=0.10.0",
 ]
 
