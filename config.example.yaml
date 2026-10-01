@@ -33,8 +33,10 @@ pose:
   yaw_center_deg: 0.0
   pitch_center_deg: 0.0
   # Allowed deviation from the centre before the viewer counts as looking away.
-  yaw_tolerance_deg: 25
-  pitch_tolerance_deg: 20
+  # Measured on a recorded session: a laptop on the lap sits at ~+30 deg yaw and
+  # looking down at ~-20 deg pitch from the screen direction.
+  yaw_tolerance_deg: 20
+  pitch_tolerance_deg: 15
 
 behavior:
   # Pause once the viewer has been looking away this long.

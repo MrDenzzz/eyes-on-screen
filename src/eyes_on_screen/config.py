@@ -78,8 +78,8 @@ class TargetConfig(_Section):
 class PoseConfig(_Section):
     yaw_center_deg: float = Field(default=0.0, ge=-90, le=90)
     pitch_center_deg: float = Field(default=0.0, ge=-90, le=90)
-    yaw_tolerance_deg: float = Field(default=25.0, gt=0, le=90)
-    pitch_tolerance_deg: float = Field(default=20.0, gt=0, le=90)
+    yaw_tolerance_deg: float = Field(default=20.0, gt=0, le=90)
+    pitch_tolerance_deg: float = Field(default=15.0, gt=0, le=90)
 
 
 class BehaviorConfig(_Section):
