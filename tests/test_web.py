@@ -259,6 +259,26 @@ def test_busy_port_is_an_os_error(app):
     run(scenario)
 
 
+def test_lan_url_only_when_listening_on_all_interfaces(app, monkeypatch):
+    monkeypatch.setattr(server_module, "lan_address", lambda: "192.168.1.20")
+    local = WebServer(WebConfig(port=8765), FakeControls(app))
+    everywhere = WebServer(WebConfig(host="0.0.0.0", port=8765, password="x"), FakeControls(app))
+
+    assert local.lan_url is None
+    assert everywhere.url == "http://127.0.0.1:8765/"
+    assert everywhere.lan_url == "http://192.168.1.20:8765/"
+
+    monkeypatch.setattr(server_module, "lan_address", lambda: None)
+    assert everywhere.lan_url is None
+
+
+def test_lan_address_is_a_real_ipv4_or_nothing():
+    address = server_module.lan_address()
+    assert address is None or (
+        re.fullmatch(r"\d+\.\d+\.\d+\.\d+", address) and not address.startswith("127.")
+    )
+
+
 @pytest.mark.parametrize(
     ("message", "level", "kind"),
     [

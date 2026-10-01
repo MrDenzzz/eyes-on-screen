@@ -129,7 +129,10 @@ class App:
             return None
         forwarder = _EventForwarder(self._web, asyncio.get_running_loop())
         events.addHandler(forwarder)
-        log.info("Web UI: %s", self._web.url)
+        if lan_url := self._web.lan_url:
+            log.info("Web UI: %s (from other devices: %s)", self._web.url, lan_url)
+        else:
+            log.info("Web UI: %s", self._web.url)
         return forwarder
 
     async def _analysis_loop(self) -> None:

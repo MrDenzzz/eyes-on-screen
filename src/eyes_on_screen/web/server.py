@@ -56,6 +56,7 @@ _NOT_BUILT = (
     "and `npm --prefix frontend run build`."
 )
 _SHUTDOWN_GRACE_S = 2
+_ALL_INTERFACES = ("0.0.0.0", "::")
 
 
 class Controls(Protocol):
@@ -74,6 +75,18 @@ class Controls(Protocol):
     async def press(self, action: Literal["play", "pause"]) -> None:
         """Raises AppleTvError when the Apple TV is unreachable."""
         ...
+
+
+def lan_address() -> str | None:
+    """This PC's IPv4 address on the network that has the default route, if any."""
+    # Connecting a UDP socket sends nothing: it only picks the outgoing interface.
+    with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as probe:
+        try:
+            probe.connect(("192.0.2.1", 9))  # TEST-NET-1, a documentation-only address
+        except OSError:
+            return None
+        address: str = probe.getsockname()[0]
+    return None if address.startswith("127.") or address == "0.0.0.0" else address
 
 
 class _Client:
@@ -107,8 +120,16 @@ class WebServer:
     @property
     def url(self) -> str:
         host = self._config.host
-        shown = "127.0.0.1" if host in ("0.0.0.0", "::") else host
+        shown = "127.0.0.1" if host in _ALL_INTERFACES else host
         return f"http://{shown}:{self._config.port}/"
+
+    @property
+    def lan_url(self) -> str | None:
+        """The address other devices open, when the UI listens on all interfaces."""
+        if self._config.host not in _ALL_INTERFACES:
+            return None
+        address = lan_address()
+        return f"http://{address}:{self._config.port}/" if address else None
 
     @property
     def has_clients(self) -> bool:
