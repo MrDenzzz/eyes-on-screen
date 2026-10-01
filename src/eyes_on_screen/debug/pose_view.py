@@ -11,7 +11,11 @@ from pathlib import Path
 
 import cv2
 
-from eyes_on_screen.attention.calibration import CalibrationError, calibrate_center
+from eyes_on_screen.attention.calibration import (
+    CalibrationError,
+    CalibrationSession,
+    calibrate_center,
+)
 from eyes_on_screen.attention.classifier import Attention, classify
 from eyes_on_screen.config import PoseConfig
 from eyes_on_screen.debug.overlay import HIGHLIGHT, MUTED, Line, View, rate, render
@@ -49,7 +53,7 @@ def run_pose_view(
     next_analysis = 0.0
     last_render = 0.0
     view: View | None = None
-    calibration: _Calibration | None = None
+    calibration: CalibrationSession | None = None
     recorder = _Recorder(record) if record else None
 
     cv2.namedWindow(WINDOW, cv2.WINDOW_NORMAL)
@@ -81,7 +85,7 @@ def run_pose_view(
 
             if view is not None and (view.fresh or now - last_render > _STATUS_REFRESH_S):
                 footer: Line = (
-                    (calibration.status(now), HIGHLIGHT, 0.6)
+                    (_calibration_text(calibration, now), HIGHLIGHT, 0.6)
                     if calibration
                     else ("c: calibrate (10 s countdown)   q: quit", MUTED, 0.45)
                 )
@@ -94,7 +98,7 @@ def run_pose_view(
             if key in (ord("q"), _KEY_ESC):
                 break
             if key == ord("c"):
-                calibration = _Calibration(now)
+                calibration = CalibrationSession(now, CALIBRATION_DELAY_S, CALIBRATION_DURATION_S)
                 log.info(
                     "Calibration starts in %.0fs: sit down and look at the screen",
                     CALIBRATION_DELAY_S,
@@ -107,23 +111,12 @@ def run_pose_view(
             recorder.close()
 
 
-class _Calibration:
-    def __init__(self, now: float) -> None:
-        self.start = now + CALIBRATION_DELAY_S
-        self.end = self.start + CALIBRATION_DURATION_S
-        self.poses: list[HeadPose] = []
-
-    def add(self, now: float, pose: HeadPose | None) -> None:
-        if pose is not None and self.start <= now <= self.end:
-            self.poses.append(pose)
-
-    def finished(self, now: float) -> bool:
-        return now > self.end
-
-    def status(self, now: float) -> str:
-        if now < self.start:
-            return f"calibration in {math.ceil(self.start - now)}s: sit down, look at the screen"
-        return "calibrating: keep looking at the screen"
+def _calibration_text(session: CalibrationSession, now: float) -> str:
+    if session.counting_down(now):
+        return (
+            f"calibration in {math.ceil(session.remaining_s(now))}s: sit down, look at the screen"
+        )
+    return "calibrating: keep looking at the screen"
 
 
 class _Recorder:

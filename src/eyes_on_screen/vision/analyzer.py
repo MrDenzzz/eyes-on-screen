@@ -97,9 +97,19 @@ class FaceAnalyzer:
         self._crop_scale = crop_scale
         self._crop_size = crop_size
 
+    @property
+    def roi(self) -> Roi:
+        return self._roi
+
+    @roi.setter
+    def roi(self, roi: Roi) -> None:
+        # A plain attribute swap: the analysis thread sees either the old or the new ROI.
+        self._roi = roi
+
     def analyze(self, image: np.ndarray) -> list[FaceObservation]:
         height, width = image.shape[:2]
-        x0, y0, x1, y1 = _roi_to_pixels(self._roi, width, height)
+        roi = self._roi
+        x0, y0, x1, y1 = _roi_to_pixels(roi, width, height)
         area = image[y0:y1, x0:x1]
 
         found = sorted(self._detect_faces(area), key=lambda item: item[1], reverse=True)

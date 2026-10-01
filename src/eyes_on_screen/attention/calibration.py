@@ -15,6 +15,31 @@ class CalibrationError(Exception):
     """Not enough or unusable samples. User-facing message."""
 
 
+class CalibrationSession:
+    """Collects the viewer's head poses for a while, after a countdown to get ready."""
+
+    def __init__(self, now: float, delay_s: float, duration_s: float) -> None:
+        self.delay_s = delay_s
+        self.duration_s = duration_s
+        self.start = now + delay_s
+        self.end = self.start + duration_s
+        self.poses: list[HeadPose] = []
+
+    def add(self, now: float, pose: HeadPose | None) -> None:
+        if pose is not None and self.start <= now <= self.end:
+            self.poses.append(pose)
+
+    def finished(self, now: float) -> bool:
+        return now > self.end
+
+    def counting_down(self, now: float) -> bool:
+        return now < self.start
+
+    def remaining_s(self, now: float) -> float:
+        """Seconds left in the current phase (countdown, then collecting)."""
+        return max(0.0, (self.start if self.counting_down(now) else self.end) - now)
+
+
 def calibrate_center(poses: Sequence[HeadPose], current: PoseConfig) -> PoseConfig:
     """Use the median pose of a viewer looking at the screen as the new centre.
 

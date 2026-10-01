@@ -147,7 +147,7 @@ def cmd_run(config: AppConfig, args: argparse.Namespace) -> int:
         return EXIT_MODEL_ERROR
 
     def body(source: VideoSource) -> None:
-        app = App(config, source, analyzer, dry_run=args.dry_run, debug=args.debug)
+        app = App(config, args.config, source, analyzer, dry_run=args.dry_run, debug=args.debug)
         asyncio.run(app.run())
 
     return _with_camera(config, body)

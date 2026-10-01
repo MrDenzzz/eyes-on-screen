@@ -75,6 +75,15 @@ class PlaybackStateMachine:
         self._armed = True
         self._pending: tuple[Command, float] | None = None
 
+    @property
+    def behavior(self) -> BehaviorConfig:
+        return self._behavior
+
+    @behavior.setter
+    def behavior(self, behavior: BehaviorConfig) -> None:
+        """New timers apply from the next observation; running streaks are kept."""
+        self._behavior = behavior
+
     def observe(self, attention: Attention, now: float) -> Decision | None:
         """Feed one analysed frame; returns a command to send, if it is time for one."""
         gap = None if self._last_observation is None else now - self._last_observation

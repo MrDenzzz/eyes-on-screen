@@ -1,0 +1,178 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="dark">
+  <title>eyes-on-screen</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Cpath d='M2 16C6 8.5 10.7 5 16 5s10 3.5 14 11c-4 7.5-8.7 11-14 11S6 23.5 2 16z' fill='%23111522' stroke='%237c8cff' stroke-width='2.4'/%3E%3Crect x='12' y='11' width='3' height='10' rx='1' fill='%237c8cff'/%3E%3Crect x='17' y='11' width='3' height='10' rx='1' fill='%237c8cff'/%3E%3C/svg%3E">
+  <link rel="stylesheet" href="/static/app.css">
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <svg class="logo" viewBox="0 0 32 32" aria-hidden="true">
+        <path d="M2 16C6 8.5 10.7 5 16 5s10 3.5 14 11c-4 7.5-8.7 11-14 11S6 23.5 2 16z" class="logo-eye"/>
+        <rect x="12" y="11" width="3" height="10" rx="1" class="logo-bar"/>
+        <rect x="17" y="11" width="3" height="10" rx="1" class="logo-bar"/>
+      </svg>
+      <div>
+        <div class="brand-name">eyes-on-screen</div>
+        <div class="brand-sub" id="brand-sub">connecting…</div>
+      </div>
+    </div>
+    <div class="topbar-right">
+      <span class="pill" id="pill-camera"><i class="dot"></i>Camera <b id="camera-text">–</b></span>
+      <span class="pill" id="pill-tv"><i class="dot"></i>Apple TV <b id="tv-text">–</b></span>
+      <span class="badge badge-warn" id="dry-badge" hidden>Dry run</span>
+      <label class="switch" title="When off, nothing is paused or resumed">
+        <input type="checkbox" id="automation" checked>
+        <span class="track"><span class="thumb"></span></span>
+        <span>Automation</span>
+      </label>
+    </div>
+  </header>
+
+  <main class="layout">
+    <section class="stage-col">
+      <div class="card stage">
+        <div class="video-wrap" id="video-wrap">
+          <canvas id="video"></canvas>
+          <div class="video-empty" id="video-empty">
+            <div class="spinner"></div>
+            <span id="video-empty-text">Waiting for video…</span>
+          </div>
+
+          <div class="toolbar">
+            <button class="tool" id="btn-zone" title="Draw the area where viewers sit">
+              <svg viewBox="0 0 24 24"><path d="M4 8V4h4M16 4h4v4M20 16v4h-4M8 20H4v-4"/></svg>Zone
+            </button>
+            <button class="tool" id="btn-calibrate" title="Look at the screen to set what counts as watching">
+              <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="3"/><path d="M12 1v3M12 20v3M1 12h3M20 12h3"/></svg>Calibrate
+            </button>
+            <button class="tool tool-icon" id="btn-fullscreen" title="Full screen">
+              <svg viewBox="0 0 24 24"><path d="M9 4H4v5M15 4h5v5M20 15v5h-5M4 15v5h5"/></svg>
+            </button>
+          </div>
+
+          <div class="zone-bar" id="zone-bar" hidden>
+            <span>Drag across the video to draw the viewing zone</span>
+            <button class="btn btn-primary" id="zone-save" disabled>Save</button>
+            <button class="btn" id="zone-cancel">Cancel</button>
+          </div>
+
+          <div class="now" id="now">
+            <div class="now-row">
+              <span class="now-state" id="now-state">–</span>
+              <span class="now-detail" id="now-detail"></span>
+            </div>
+            <div class="now-progress"><div class="now-bar" id="now-bar"></div></div>
+          </div>
+
+          <div class="calib" id="calib" hidden>
+            <div class="calib-ring">
+              <svg viewBox="0 0 120 120"><circle cx="60" cy="60" r="52" class="calib-track"/><circle cx="60" cy="60" r="52" class="calib-arc" id="calib-arc"/></svg>
+              <span id="calib-count">3</span>
+            </div>
+            <div class="calib-text" id="calib-text">Look at the screen</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-head">
+          <h2>Attention</h2>
+          <span class="muted">last 60 seconds</span>
+          <div class="legend">
+            <span><i class="sw sw-looking"></i>Looking</span>
+            <span><i class="sw sw-away"></i>Away</span>
+            <span><i class="sw sw-absent"></i>Nobody</span>
+          </div>
+        </div>
+        <canvas id="timeline" class="timeline"></canvas>
+      </div>
+    </section>
+
+    <aside class="side-col">
+      <div class="card">
+        <div class="card-head"><h2>Player</h2><span class="muted" id="player-device"></span></div>
+        <div class="player">
+          <div class="player-state" id="player-state">–</div>
+          <div class="player-title" id="player-title">Nothing reported yet</div>
+          <div class="player-app" id="player-app"></div>
+          <div class="player-badges" id="player-badges"></div>
+          <div class="player-actions">
+            <button class="btn" id="btn-pause"><svg viewBox="0 0 24 24"><rect x="6" y="5" width="4" height="14" rx="1"/><rect x="14" y="5" width="4" height="14" rx="1"/></svg>Pause</button>
+            <button class="btn" id="btn-play"><svg viewBox="0 0 24 24"><path d="M7 5l12 7-12 7z"/></svg>Play</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-head"><h2>Viewers</h2><span class="muted" id="viewers-summary"></span></div>
+        <ul class="viewers" id="viewers"><li class="empty">Nobody in the zone</li></ul>
+      </div>
+
+      <div class="card">
+        <div class="card-head"><h2>Settings</h2><span class="saved" id="saved">Saved</span></div>
+
+        <div class="setting">
+          <div class="setting-label">Several viewers</div>
+          <div class="segmented" id="seg-viewers">
+            <button data-value="any_away">Any away</button>
+            <button data-value="all_away">All away</button>
+            <button data-value="nearest">Nearest</button>
+          </div>
+          <div class="hint" id="viewers-hint"></div>
+        </div>
+
+        <div class="setting">
+          <div class="setting-label">Pause after looking away <output id="out-pause"></output></div>
+          <input type="range" id="rng-pause" min="0.5" max="5" step="0.1" data-section="behavior" data-key="pause_after_s">
+        </div>
+        <div class="setting">
+          <div class="setting-label">Resume after looking back <output id="out-resume"></output></div>
+          <input type="range" id="rng-resume" min="0.1" max="3" step="0.1" data-section="behavior" data-key="resume_after_s">
+        </div>
+        <div class="setting">
+          <div class="setting-label">When nobody is there</div>
+          <div class="segmented" id="seg-lost">
+            <button data-value="pause">Pause</button>
+            <button data-value="ignore">Keep playing</button>
+          </div>
+        </div>
+        <div class="setting" id="row-lost-delay">
+          <div class="setting-label">…after <output id="out-lost"></output></div>
+          <input type="range" id="rng-lost" min="1" max="15" step="0.5" data-section="behavior" data-key="face_lost_after_s">
+        </div>
+
+        <div class="setting-group">Head pose</div>
+        <div class="setting">
+          <div class="setting-label">Screen direction
+            <output id="out-centre"></output>
+          </div>
+          <div class="hint">Set by <b>Calibrate</b> while looking at the screen.</div>
+        </div>
+        <div class="setting">
+          <div class="setting-label">Turn left/right allowed <output id="out-yaw"></output></div>
+          <input type="range" id="rng-yaw" min="5" max="45" step="1" data-section="pose" data-key="yaw_tolerance_deg">
+        </div>
+        <div class="setting">
+          <div class="setting-label">Tilt up/down allowed <output id="out-pitch"></output></div>
+          <input type="range" id="rng-pitch" min="5" max="40" step="1" data-section="pose" data-key="pitch_tolerance_deg">
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-head"><h2>Events</h2></div>
+        <ul class="events" id="events"><li class="empty">No events yet</li></ul>
+      </div>
+    </aside>
+  </main>
+
+  <div class="toasts" id="toasts"></div>
+  <div class="offline" id="offline" hidden><div class="spinner"></div>Connection to eos lost. Reconnecting…</div>
+
+  <script src="/static/app.js"></script>
+</body>
+</html>

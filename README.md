@@ -25,6 +25,18 @@ uv run eos run --dry-run   # only log what would be paused / resumed
 
 Pause and resume events with their reasons go to `logs/events.log`.
 
+### Web UI
+
+`eos run` also serves a web UI at <http://127.0.0.1:8765>: live video with the viewing
+zone, a viewfinder box and gaze arrow per viewer, the attention timeline of the last
+minute with pause/resume markers, player state with Play/Pause, settings (several-viewers
+mode, timers, pose tolerances), drawing the zone with the mouse, calibration with a
+countdown, an automation switch and the event feed. Changes are saved to `config.yaml`
+with its comments intact.
+
+To open it from another device (a laptop on the sofa), set `web.host: 0.0.0.0` and a
+`web.password`: the page shows a live camera, so it never goes on the network without one.
+
 How it decides:
 
 - Pause while playing once the viewers looked away for `behavior.pause_after_s`
