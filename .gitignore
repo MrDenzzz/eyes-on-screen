@@ -15,17 +15,17 @@ wheels/
 
 # Local config and secrets (copy config.example.yaml -> config.yaml)
 config.yaml
-data/
+/data/
 
 # go2rtc binary and its live config (holds the Mi Home token)
 go2rtc/*
 !go2rtc/go2rtc.example.yaml
 
 # Downloaded model files
-models/
+/models/
 
 # Runtime logs
-logs/
+/logs/
 
 # Frontend dependencies (the built UI in src/eyes_on_screen/web/static is committed)
 frontend/node_modules/
