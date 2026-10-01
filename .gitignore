@@ -17,6 +17,10 @@ wheels/
 config.yaml
 data/
 
+# go2rtc binary and its live config (holds the Mi Home token)
+go2rtc/*
+!go2rtc/go2rtc.example.yaml
+
 # Downloaded model files
 models/
 

@@ -1,0 +1,24 @@
+# go2rtc config for eyes-on-screen (see docs/go2rtc.md).
+# Copy to go2rtc.yaml next to go2rtc.exe. After you log in to Mi Home in the WebUI,
+# go2rtc stores your account token in that file under `xiaomi:` - keep it private
+# (it is git-ignored).
+
+api:
+  # WebUI/API on this PC only: whoever can open it can use your Mi Home session.
+  listen: "127.0.0.1:1984"
+
+rtsp:
+  # eyes-on-screen reads rtsp://127.0.0.1:8554/<stream name>
+  listen: "127.0.0.1:8554"
+
+webrtc:
+  # Not needed here; otherwise go2rtc opens port 8555 on every network interface.
+  listen: ""
+
+streams:
+  # Added after logging in (WebUI > Add > Xiaomi). The URL looks like:
+  # c400: xiaomi://<user_id>:<region>@<camera_ip>?did=<device_id>&model=chuangmi.camera.039a04
+
+  # Fallback if the HEVC stream is unstable for the app: re-encode to H.264 on an
+  # NVIDIA GPU (needs ffmpeg in PATH). Point video.rtsp_url at .../c400_h264.
+  # c400_h264: ffmpeg:c400#video=h264#hardware=cuda

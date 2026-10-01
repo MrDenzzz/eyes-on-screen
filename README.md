@@ -14,3 +14,12 @@ copy config.example.yaml config.yaml   # then edit config.yaml
 uv run eos config-check
 uv run pytest
 ```
+
+## Camera
+
+The Xiaomi C400 is read over RTSP re-published by go2rtc: see [docs/go2rtc.md](docs/go2rtc.md).
+A local webcam works too (`video.source: webcam`). Check the stream with:
+
+```shell
+uv run eos preview
+```
