@@ -90,6 +90,10 @@ export interface EventInfo {
   time: string;
   level: "info" | "warning";
   kind: "pause" | "resume" | "player" | "calibration" | "other";
+  code: string;
+  params: {
+    [k: string]: string | number | boolean | null;
+  };
   text: string;
 }
 /**
@@ -208,6 +212,7 @@ export interface RecordingResult {
  * via the `definition` "RecordingStepInfo".
  */
 export interface RecordingStepInfo {
+  id: string;
   label: string;
   title: string;
   instruction: string;

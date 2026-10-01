@@ -12,6 +12,8 @@ import pytest
 from eyes_on_screen.app import App
 from eyes_on_screen.appletv.state import AppleTvError
 from eyes_on_screen.config import WebConfig, load_config
+from eyes_on_screen.events import emit
+from eyes_on_screen.logging_setup import EVENTS_LOGGER
 from eyes_on_screen.settings import SettingsError
 from eyes_on_screen.video.source import SourceStats
 from eyes_on_screen.vision.analyzer import FaceAnalyzer
@@ -30,7 +32,9 @@ def free_port() -> int:
 
 
 def event(text: str = "hello") -> EventInfo:
-    return EventInfo(ts=1, time="12:00:00", level="info", kind="other", text=text)
+    return EventInfo(
+        ts=1, time="12:00:00", level="info", kind="other", code="other", params={}, text=text
+    )
 
 
 class FakeSource:
@@ -311,30 +315,52 @@ def test_lan_address_is_a_real_ipv4_or_nothing():
 
 
 @pytest.mark.parametrize(
-    ("message", "level", "kind"),
+    ("code", "level", "kind"),
     [
-        ("paused: looked away for 1.6s", logging.INFO, "pause"),
-        ("would resume: looking at the screen for 0.5s", logging.INFO, "resume"),
-        ("player: playing (TV - Show)", logging.INFO, "player"),
-        ("calibrated: screen at yaw +2.9", logging.INFO, "calibration"),
-        ("pause failed: timeout", logging.WARNING, "other"),
+        ("paused", logging.INFO, "pause"),
+        ("would_resume", logging.INFO, "resume"),
+        ("paused_elsewhere", logging.INFO, "player"),
+        ("calibrated", logging.INFO, "calibration"),
+        ("command_failed", logging.WARNING, "other"),
     ],
 )
-def test_events_are_forwarded_with_their_kind(message, level, kind):
+def test_events_are_forwarded_with_their_code_kind_and_values(code, level, kind, caplog):
+    caplog.set_level(logging.INFO, logger=EVENTS_LOGGER)  # what setup_logging does
     published: list[EventInfo] = []
 
     async def scenario():
         web = type("Web", (), {"publish_event": staticmethod(published.append)})()
         handler = EventForwarder(web, asyncio.get_running_loop())
-        handler.emit(logging.LogRecord("events", level, __file__, 1, message, None, None))
+        logger = logging.getLogger(EVENTS_LOGGER)
+        logger.addHandler(handler)
+        try:
+            emit(code, "%s happened", code, level=level, params={"seconds": 1.6})
+        finally:
+            logger.removeHandler(handler)
         await asyncio.sleep(0)
 
     run(scenario)
 
     [forwarded] = published
-    assert forwarded.kind == kind
-    assert forwarded.text == message
+    assert (forwarded.code, forwarded.kind) == (code, kind)
+    assert forwarded.params == {"seconds": 1.6}
+    assert forwarded.text == f"{code} happened"
     assert forwarded.level == ("warning" if level >= logging.WARNING else "info")
+
+
+def test_a_plain_log_line_is_an_other_event():
+    published: list[EventInfo] = []
+
+    async def scenario():
+        web = type("Web", (), {"publish_event": staticmethod(published.append)})()
+        handler = EventForwarder(web, asyncio.get_running_loop())
+        handler.emit(logging.LogRecord("events", logging.INFO, __file__, 1, "hi", None, None))
+        await asyncio.sleep(0)
+
+    run(scenario)
+
+    [forwarded] = published
+    assert (forwarded.code, forwarded.kind, forwarded.params) == ("other", "other", {})
 
 
 def test_web_ui_pushes_what_the_app_sees(app):

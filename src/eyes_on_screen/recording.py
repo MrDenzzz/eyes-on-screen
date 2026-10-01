@@ -42,6 +42,8 @@ COLUMNS = (
 
 @dataclass(frozen=True, slots=True)
 class Step:
+    id: str
+    """Stable name of the step, e.g. for the web UI to show it in another language."""
     label: str
     """What the viewer does: the class a threshold has to tell apart (screen, phone...)."""
     title: str
@@ -50,24 +52,44 @@ class Step:
 
 
 GAZE_STEPS: tuple[Step, ...] = (
-    Step("screen", "Watch the TV", "Sit as usual and watch the TV. Blink and move naturally.", 40),
     Step(
+        "watch_tv",
+        "screen",
+        "Watch the TV",
+        "Sit as usual and watch the TV. Blink and move naturally.",
+        40,
+    ),
+    Step(
+        "phone_in_hands",
         "phone",
         "Phone in your hands",
         "Hold the phone at chest height and scroll through it, the way you usually do on the sofa.",
         40,
     ),
-    Step("phone", "Phone on your lap", "Rest the phone on your lap and read from it.", 40),
-    Step("screen", "Back to the TV", "Look at the TV again.", 30),
     Step(
+        "phone_on_lap",
+        "phone",
+        "Phone on your lap",
+        "Rest the phone on your lap and read from it.",
+        40,
+    ),
+    Step("back_to_tv", "screen", "Back to the TV", "Look at the TV again.", 30),
+    Step(
+        "look_around",
         "elsewhere",
         "Look around",
         "Look anywhere but the TV: out of the window, to the sides, at someone next to you.",
         30,
     ),
-    Step("closed", "Close your eyes", "Lean back and close your eyes, as if dozing off.", 20),
-    Step("phone", "Phone again", "Back to the phone, held the way you like.", 30),
-    Step("screen", "TV once more", "Finish by watching the TV.", 30),
+    Step(
+        "eyes_closed",
+        "closed",
+        "Close your eyes",
+        "Lean back and close your eyes, as if dozing off.",
+        20,
+    ),
+    Step("phone_again", "phone", "Phone again", "Back to the phone, held the way you like.", 30),
+    Step("tv_once_more", "screen", "TV once more", "Finish by watching the TV.", 30),
 )
 
 

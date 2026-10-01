@@ -6,6 +6,7 @@ import { makeStatus } from "../test/fixtures";
 import { PlayerCard } from "./PlayerCard";
 import { RecordPage } from "./RecordPage";
 import { SettingsCard } from "./SettingsCard";
+import { TopBar } from "./TopBar";
 
 const STEPS = [
   { label: "screen", title: "Watch the TV", instruction: "Watch it.", duration_s: 40 },
@@ -150,5 +151,25 @@ describe("RecordPage", () => {
     fireEvent.click(screen.getByRole("button", { name: "Finish" }));
 
     expect(api.finishRecording).toHaveBeenCalled();
+  });
+});
+
+describe("Language", () => {
+  it("switches the whole page to Russian", () => {
+    useEos.setState({ status: makeStatus() });
+    render(
+      <>
+        <TopBar page="live" />
+        <PlayerCard />
+      </>,
+    );
+    expect(screen.getByRole("button", { name: "Pause" })).toBeTruthy();
+
+    fireEvent.click(screen.getByRole("radio", { name: "RU" }));
+
+    expect(useEos.getState().lang).toBe("ru");
+    expect(document.documentElement.lang).toBe("ru");
+    expect(screen.getByRole("button", { name: "Пауза" })).toBeTruthy();
+    expect(screen.getByText("Автоматика")).toBeTruthy();
   });
 });

@@ -88,6 +88,7 @@ class CalibrationInfo(_Message):
 
 
 class RecordingStepInfo(_Message):
+    id: str
     label: str
     title: str
     instruction: str
@@ -163,7 +164,12 @@ class EventInfo(_Message):
     time: str
     level: Literal["info", "warning"]
     kind: Literal["pause", "resume", "player", "calibration", "other"]
+    code: str
+    """What happened (events.emit codes: paused, player, calibrated...), "other" if unknown."""
+    params: dict[str, str | int | float | bool | None]
+    """The event's values, for the page to phrase it in the viewer's language."""
     text: str
+    """The English log line, shown when the page has no phrase for `code`."""
 
 
 class EventsMessage(_Message):

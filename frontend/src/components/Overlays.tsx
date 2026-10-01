@@ -1,3 +1,4 @@
+import { useT } from "../hooks/useT";
 import { useEos } from "../store";
 
 export function Toasts() {
@@ -16,11 +17,12 @@ export function Toasts() {
 export function OfflineBanner() {
   const online = useEos((state) => state.online);
   const everConnected = useEos((state) => state.status !== null);
+  const t = useT();
   if (online || !everConnected) return null;
   return (
     <div className="offline" role="status">
       <div className="spinner" />
-      Connection to eos lost. Reconnecting…
+      {t.offline}
     </div>
   );
 }

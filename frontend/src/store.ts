@@ -1,5 +1,6 @@
 import { create } from "zustand";
 
+import { DICTS, eventText, initialLang, type Lang, rememberLang } from "./i18n";
 import type { TimelinePoint } from "./lib/timeline";
 import type { EventInfo, FrameHeader, StatusMessage } from "./protocol/types";
 
@@ -34,6 +35,7 @@ export interface EosState {
   events: EventInfo[];
   toasts: Toast[];
   zoneEditing: boolean;
+  lang: Lang;
 }
 
 export const initialState: EosState = {
@@ -45,6 +47,7 @@ export const initialState: EosState = {
   events: [],
   toasts: [],
   zoneEditing: false,
+  lang: initialLang(),
 };
 
 export const useEos = create<EosState>()(() => initialState);
@@ -85,7 +88,7 @@ export function addEvents(events: EventInfo[]): void {
   });
   for (const event of events) {
     if (event.kind === "calibration" && Date.now() - event.ts < FRESH_EVENT_MS) {
-      toast(event.text, event.level === "warning");
+      toast(eventText(event, DICTS[state.lang]), event.level === "warning");
     }
   }
 }
@@ -102,4 +105,9 @@ export function toast(text: string, error = false): void {
 
 export function setZoneEditing(zoneEditing: boolean): void {
   useEos.setState({ zoneEditing });
+}
+
+export function setLang(lang: Lang): void {
+  rememberLang(lang);
+  useEos.setState({ lang });
 }

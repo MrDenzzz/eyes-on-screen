@@ -2,7 +2,10 @@ import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 
 import { App } from "./App";
+import { useEos } from "./store";
 import "./styles.css";
+
+document.documentElement.lang = useEos.getState().lang;
 
 const root = document.getElementById("root");
 if (!root) throw new Error("#root is missing from index.html");

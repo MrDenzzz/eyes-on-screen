@@ -2,7 +2,12 @@ import pytest
 
 from eyes_on_screen.appletv.state import Playback, PlayerState
 from eyes_on_screen.attention.classifier import Attention
-from eyes_on_screen.attention.state_machine import Decision, PlaybackCommand, PlaybackStateMachine
+from eyes_on_screen.attention.state_machine import (
+    Decision,
+    PlaybackCommand,
+    PlaybackStateMachine,
+    Reason,
+)
 from eyes_on_screen.config import BehaviorConfig, FaceLostAction
 
 LOOKING, AWAY, ABSENT = Attention.LOOKING, Attention.AWAY, Attention.ABSENT
@@ -58,7 +63,8 @@ class TestPause:
         [decision] = room.watch(AWAY, 0.2)
 
         assert decision.command is PlaybackCommand.PAUSE
-        assert "looked away" in decision.reason
+        assert decision.reason is Reason.LOOKED_AWAY
+        assert decision.why == "looked away for 1.5s"
 
     def test_short_glances_away_restart_the_timer(self, room):
         for _ in range(3):
@@ -70,7 +76,7 @@ class TestPause:
         [decision] = room.watch(ABSENT, 0.2)
 
         assert decision.command is PlaybackCommand.PAUSE
-        assert "no viewer" in decision.reason
+        assert decision.reason is Reason.NO_VIEWER
 
     def test_viewer_leaving_can_be_ignored(self, clock):
         room = Room(clock, BEHAVIOR.model_copy(update={"on_face_lost": FaceLostAction.IGNORE}))
@@ -104,7 +110,7 @@ class TestResume:
         [decision] = room.watch(LOOKING, 0.2)
 
         assert decision.command is PlaybackCommand.RESUME
-        assert "looking at the screen" in decision.reason
+        assert decision.reason is Reason.LOOKING
 
     def test_never_resumes_a_pause_from_the_remote(self, room):
         room.watch(LOOKING, 1)

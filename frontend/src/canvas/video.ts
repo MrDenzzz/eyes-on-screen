@@ -1,4 +1,4 @@
-import { signed } from "../lib/format";
+import type { Dict } from "../i18n";
 import type { FaceInfo } from "../protocol/types";
 import type { Frame } from "../store";
 import { COLORS, chip, prepare } from "./draw";
@@ -13,14 +13,13 @@ export interface Viewport {
   h: number;
 }
 
-const STATE_LABEL = { looking: "Looking", away: "Away" } as const;
-
 /** Draws the frame, the viewing zone and every face; returns where the video landed. */
 export function drawVideo(
   canvas: HTMLCanvasElement,
   frame: Frame | null,
   roi: Roi | null,
   editing: boolean,
+  t: Dict,
 ): Viewport | null {
   const sized = prepare(canvas);
   if (!sized || !frame) return null;
@@ -34,12 +33,18 @@ export function drawVideo(
     h: bitmap.height * scale,
   };
   ctx.drawImage(bitmap, view.x, view.y, view.w, view.h);
-  if (roi) drawZone(ctx, view, roi, editing);
-  if (!editing) header.faces.forEach((face) => drawFace(ctx, view, face));
+  if (roi) drawZone(ctx, view, roi, editing, t.video.viewingZone);
+  if (!editing) header.faces.forEach((face) => drawFace(ctx, view, face, t));
   return view;
 }
 
-function drawZone(ctx: CanvasRenderingContext2D, view: Viewport, roi: Roi, editing: boolean): void {
+function drawZone(
+  ctx: CanvasRenderingContext2D,
+  view: Viewport,
+  roi: Roi,
+  editing: boolean,
+  label: string,
+): void {
   const [x1, y1, x2, y2] = roi;
   const zone = { x: view.x + x1 * view.w, y: view.y + y1 * view.h, w: (x2 - x1) * view.w, h: (y2 - y1) * view.h };
   ctx.save();
@@ -54,7 +59,7 @@ function drawZone(ctx: CanvasRenderingContext2D, view: Viewport, roi: Roi, editi
   ctx.strokeStyle = editing ? COLORS.accent : "rgba(124, 140, 255, 0.75)";
   ctx.strokeRect(zone.x, zone.y, zone.w, zone.h);
   ctx.setLineDash([]);
-  chip(ctx, "VIEWING ZONE", zone.x + 8, zone.y + 8, "rgba(124, 140, 255, 0.92)", "#fff", "top");
+  chip(ctx, label, zone.x + 8, zone.y + 8, "rgba(124, 140, 255, 0.92)", "#fff", "top");
   if (editing) {
     ctx.fillStyle = COLORS.accent;
     for (const [hx, hy] of [
@@ -71,7 +76,7 @@ function drawZone(ctx: CanvasRenderingContext2D, view: Viewport, roi: Roi, editi
   ctx.restore();
 }
 
-function drawFace(ctx: CanvasRenderingContext2D, view: Viewport, face: FaceInfo): void {
+function drawFace(ctx: CanvasRenderingContext2D, view: Viewport, face: FaceInfo, t: Dict): void {
   const [x1, y1, x2, y2] = face.box;
   const box = { x: view.x + x1 * view.w, y: view.y + y1 * view.h, w: (x2 - x1) * view.w, h: (y2 - y1) * view.h };
   ctx.save();
@@ -83,7 +88,7 @@ function drawFace(ctx: CanvasRenderingContext2D, view: Viewport, face: FaceInfo)
     ctx.strokeStyle = "rgba(139, 149, 167, 0.7)";
     ctx.strokeRect(box.x, box.y, box.w, box.h);
     ctx.setLineDash([]);
-    chip(ctx, "ignored", box.x, box.y - 6, "rgba(20, 23, 32, 0.85)", COLORS.ignored, "bottom");
+    chip(ctx, t.video.ignored, box.x, box.y - 6, "rgba(20, 23, 32, 0.85)", COLORS.ignored, "bottom");
     ctx.restore();
     return;
   }
@@ -128,8 +133,10 @@ function drawFace(ctx: CanvasRenderingContext2D, view: Viewport, face: FaceInfo)
   }
 
   const angles =
-    face.yaw === null || face.pitch === null ? "no landmarks" : `${signed(face.yaw)}° / ${signed(face.pitch)}°`;
-  chip(ctx, `${STATE_LABEL[face.state]} · ${angles}`, frame.x, frame.y - 6, color, "#0b0d12", "bottom");
+    face.yaw === null || face.pitch === null
+      ? t.video.noLandmarks
+      : `${t.fmt.signed(face.yaw)}° / ${t.fmt.signed(face.pitch)}°`;
+  chip(ctx, `${t.video.face[face.state]} · ${angles}`, frame.x, frame.y - 6, color, "#0b0d12", "bottom");
   ctx.restore();
 }
 

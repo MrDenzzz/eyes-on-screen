@@ -1,3 +1,4 @@
+import type { Dict } from "../i18n";
 import type { Run } from "../lib/timeline";
 import type { Marker } from "../store";
 import { COLORS, prepare, roundedRect } from "./draw";
@@ -12,6 +13,7 @@ export function drawTimeline(
   markers: readonly Marker[],
   now: number,
   spanMs: number,
+  words: Dict["timeline"],
 ): void {
   const sized = prepare(canvas);
   if (!sized) return;
@@ -48,7 +50,7 @@ export function drawTimeline(
   ctx.textBaseline = "top";
   const spanS = spanMs / 1000;
   for (let s = 0; s <= spanS; s += 10) {
-    const label = s === 0 ? "now" : `-${s}s`;
+    const label = s === 0 ? words.now : words.ago(s);
     const textWidth = ctx.measureText(label).width;
     const tx = width - (s / spanS) * width - textWidth / 2;
     ctx.fillText(label, Math.min(Math.max(tx, 0), width - textWidth), BAR_TOP + BAR_HEIGHT + 6);

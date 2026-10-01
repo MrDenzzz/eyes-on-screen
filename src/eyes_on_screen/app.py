@@ -33,7 +33,7 @@ from eyes_on_screen.attention.state_machine import (
 )
 from eyes_on_screen.attention.viewers import RoomAttention, ViewerFilter, room_attention
 from eyes_on_screen.config import AppConfig
-from eyes_on_screen.logging_setup import EVENTS_LOGGER
+from eyes_on_screen.events import Param, emit
 from eyes_on_screen.recording import GuidedRecording, RecordingError
 from eyes_on_screen.settings import Changes, SettingsError, apply_changes, save_changes
 from eyes_on_screen.video.source import Frame, SourceStats, VideoSource
@@ -41,7 +41,6 @@ from eyes_on_screen.vision.analyzer import FaceAnalyzer, FaceObservation
 from eyes_on_screen.vision.target import select_target
 
 log = logging.getLogger(__name__)
-events = logging.getLogger(EVENTS_LOGGER)
 
 # The viewer holds the phone or laptop when calibrating: a short countdown is enough.
 CALIBRATION_DELAY_S = 3.0
@@ -108,7 +107,12 @@ class App:
 
     async def run(self) -> None:
         """Run until cancelled (Ctrl+C)."""
-        events.info("started%s", " (dry run: commands are only logged)" if self.dry_run else "")
+        emit(
+            "started",
+            "started%s",
+            " (dry run: commands are only logged)" if self.dry_run else "",
+            params={"dry_run": self.dry_run},
+        )
         player_task = (
             asyncio.create_task(self._player.run_forever(), name="player")
             if self._player is not None
@@ -124,7 +128,7 @@ class App:
                 await self._player.close()
             self._worker.shutdown(wait=True)
             self.finish_recording()
-            events.info("stopped")
+            emit("stopped", "stopped")
 
     # The pipeline
 
@@ -190,24 +194,39 @@ class App:
             await listener.scene(scene)
 
     async def _execute(self, decision: Decision) -> None:
+        pause = decision.command is PlaybackCommand.PAUSE
+        params: dict[str, Param] = {"reason": decision.reason.value, "seconds": decision.seconds}
         if self.dry_run or self._player is None:
             self._machine.skip()
-            events.info("would %s: %s", decision.command.value, decision.reason)
+            code = "would_pause" if pause else "would_resume"
+            emit(code, "would %s: %s", decision.command.value, decision.why, params=params)
             return
         try:
-            if decision.command is PlaybackCommand.PAUSE:
-                await self._player.pause()
-            else:
-                await self._player.play()
+            await (self._player.pause() if pause else self._player.play())
         except Exception as exc:  # network trouble must not stop the app
             # The state machine resends once the command times out unconfirmed.
-            events.warning("%s failed: %s", decision.command.value, exc)
+            emit(
+                "command_failed",
+                "%s failed: %s",
+                decision.command.value,
+                exc,
+                level=logging.WARNING,
+                params={"command": decision.command.value, "error": str(exc)},
+            )
             return
-        verb = "paused" if decision.command is PlaybackCommand.PAUSE else "resumed"
-        events.info("%s: %s", verb, decision.reason)
+        verb = "paused" if pause else "resumed"
+        emit(verb, "%s: %s", verb, decision.why, params=params)
 
     def _on_player(self, state: PlayerState | None) -> None:
-        events.info("player: %s", state or "disconnected")
+        if state is None:
+            emit("player_lost", "player: disconnected")
+        else:
+            emit(
+                "player",
+                "player: %s",
+                state,
+                params={"playback": state.playback.value, "app": state.app, "title": state.title},
+            )
         self._machine.player_changed(state, time.monotonic())
 
     # What the UI shows
@@ -275,14 +294,19 @@ class App:
     def set_automation(self, enabled: bool) -> None:
         if enabled != self.automation:
             self.automation = enabled
-            events.info("automation %s", "on" if enabled else "off")
+            emit(
+                "automation",
+                "automation %s",
+                "on" if enabled else "off",
+                params={"enabled": enabled},
+            )
 
     async def press(self, action: Literal["play", "pause"]) -> None:
         """Raises AppleTvError when the player is unreachable or not set up."""
         if self._player is None:
             raise AppleTvError("no Apple TV is set up: run `eos atv scan` and `eos atv pair`")
         await (self._player.play() if action == "play" else self._player.pause())
-        events.info("%s pressed", action)
+        emit("pressed", "%s pressed", action, params={"action": action})
 
     def start_recording_step(self, index: int) -> None:
         """Start (or redo) a step of the guided recording; raises RecordingError."""
@@ -297,7 +321,8 @@ class App:
             raise RecordingError(f"cannot write {recording.path}: {exc}") from exc
         if self._recording is None:
             self._recording = recording
-            events.info("recording to %s", self.shown_path(recording.path))
+            file = self.shown_path(recording.path)
+            emit("recording_started", "recording to %s", file, params={"file": file})
 
     def cancel_recording_step(self) -> None:
         if self._recording is not None:
@@ -307,7 +332,8 @@ class App:
         recording, self._recording = self._recording, None
         if recording is not None:
             recording.close()
-            events.info("recording saved: %s", self.shown_path(recording.path))
+            file = self.shown_path(recording.path)
+            emit("recording_saved", "recording saved: %s", file, params={"file": file})
 
     # Calibration and recording internals
 
@@ -325,13 +351,25 @@ class App:
                 }
             )
         except (CalibrationError, SettingsError) as exc:
-            events.warning("calibration failed: %s", exc)
+            emit(
+                "calibration_failed",
+                "calibration failed: %s",
+                exc,
+                level=logging.WARNING,
+                params={"error": str(exc)},
+            )
             return
-        events.info(
+        emit(
+            "calibrated",
             "calibrated: screen at yaw %+.1f, pitch %+.1f (from %d poses)",
             centre.yaw_center_deg,
             centre.pitch_center_deg,
             len(poses),
+            params={
+                "yaw": centre.yaw_center_deg,
+                "pitch": centre.pitch_center_deg,
+                "poses": len(poses),
+            },
         )
 
     def _tick_recording(self, now: float) -> None:
@@ -341,10 +379,17 @@ class App:
         if result is not None:
             step = self._recording.steps[result.index]
             share = result.with_face / result.frames if result.frames else 0.0
-            events.info(
+            emit(
+                "step_recorded",
                 'recorded step %d "%s": %d frames, face measured in %.0f%%',
                 result.index + 1,
                 step.title,
                 result.frames,
                 share * 100,
+                params={
+                    "step": result.index + 1,
+                    "step_id": step.id,
+                    "frames": result.frames,
+                    "face_share": round(share, 3),
+                },
             )

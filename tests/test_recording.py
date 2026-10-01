@@ -23,8 +23,8 @@ FACE = FaceObservation(
 )
 NO_LANDMARKS = FaceObservation((0.1, 0.1, 0.12, 0.14), 0.7, None)
 STEPS = (
-    Step("screen", "Watch the TV", "Watch it.", 2.0),
-    Step("phone", "Phone", "Read it.", 1.0),
+    Step("tv", "screen", "Watch the TV", "Watch it.", 2.0),
+    Step("phone", "phone", "Phone", "Read it.", 1.0),
 )
 FPS = 10
 
@@ -149,4 +149,5 @@ def test_pose_recorder_without_a_face(tmp_path):
 
 def test_the_gaze_script_covers_every_label_it_should_tell_apart():
     assert {step.label for step in GAZE_STEPS} == {"screen", "phone", "elsewhere", "closed"}
+    assert len({step.id for step in GAZE_STEPS}) == len(GAZE_STEPS)
     assert all(step.duration_s >= 20 for step in GAZE_STEPS)

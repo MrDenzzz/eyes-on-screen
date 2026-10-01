@@ -4,12 +4,12 @@ import { drawVideo, type Roi, toFramePoint, type Viewport } from "../canvas/vide
 import { api } from "../api";
 import { run } from "../eos";
 import { useResizeTick } from "../hooks/useResizeTick";
+import { useT } from "../hooks/useT";
 import { describeNow } from "../lib/now";
 import type { CalibrationInfo, StatusMessage } from "../protocol/types";
 import { setZoneEditing, useEos } from "../store";
 import { FullscreenIcon, TargetIcon, ZoneIcon } from "./icons";
 
-const STATE_LABEL = { looking: "LOOKING", away: "AWAY", absent: "NOBODY" } as const;
 const MIN_ZONE = 0.03;
 const RING_LENGTH = 327; // circumference of the r=52 calibration ring
 
@@ -17,6 +17,7 @@ export function VideoStage() {
   const frame = useEos((state) => state.frame);
   const status = useEos((state) => state.status);
   const editing = useEos((state) => state.zoneEditing);
+  const t = useT();
   const wrapRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const viewport = useRef<Viewport | null>(null);
@@ -28,8 +29,8 @@ export function VideoStage() {
   const roi = editing ? (draft ?? savedRoi) : savedRoi;
 
   useLayoutEffect(() => {
-    if (canvasRef.current) viewport.current = drawVideo(canvasRef.current, frame, roi, editing);
-  }, [frame, roi, editing, resizeTick]);
+    if (canvasRef.current) viewport.current = drawVideo(canvasRef.current, frame, roi, editing, t);
+  }, [frame, roi, editing, resizeTick, t]);
 
   function stopEditing() {
     setZoneEditing(false);
@@ -60,7 +61,7 @@ export function VideoStage() {
   async function saveZone() {
     if (!draft) return;
     const rounded = draft.map((value) => Math.round(value * 1000) / 1000) as Roi;
-    if (await run(api.changeSettings({ target: { roi: rounded } }), "Zone not saved")) {
+    if (await run(api.changeSettings({ target: { roi: rounded } }), t.video.zoneNotSaved)) {
       stopEditing();
     }
   }
@@ -80,7 +81,7 @@ export function VideoStage() {
         {!frame && (
           <div className="video-empty">
             <div className="spinner" />
-            <span>{status && !status.stream.connected ? "Waiting for the camera…" : "Waiting for video…"}</span>
+            <span>{status && !status.stream.connected ? t.video.waitingCamera : t.video.waitingVideo}</span>
           </div>
         )}
 
@@ -88,25 +89,25 @@ export function VideoStage() {
           <button
             type="button"
             className={`tool${editing ? " active" : ""}`}
-            title="Draw the area where viewers sit"
+            title={t.video.zoneTitle}
             onClick={() => (editing ? stopEditing() : setZoneEditing(true))}
           >
             <ZoneIcon />
-            Zone
+            {t.video.zone}
           </button>
           <button
             type="button"
             className={`tool${status?.calibration ? " active" : ""}`}
-            title="Look at the screen to set what counts as watching"
-            onClick={() => void run(api.calibrate(), "Calibration")}
+            title={t.video.calibrateTitle}
+            onClick={() => void run(api.calibrate(), t.video.calibration)}
           >
             <TargetIcon />
-            Calibrate
+            {t.video.calibrate}
           </button>
           <button
             type="button"
             className="tool tool-icon"
-            title="Full screen"
+            title={t.video.fullscreen}
             onClick={() =>
               document.fullscreenElement ? void document.exitFullscreen() : void wrapRef.current?.requestFullscreen()
             }
@@ -117,12 +118,12 @@ export function VideoStage() {
 
         {editing && (
           <div className="zone-bar">
-            <span>Drag across the video to draw the viewing zone</span>
+            <span>{t.video.zoneHint}</span>
             <button type="button" className="btn btn-primary" disabled={!draftValid} onClick={() => void saveZone()}>
-              Save
+              {t.video.save}
             </button>
             <button type="button" className="btn" onClick={stopEditing}>
-              Cancel
+              {t.video.cancel}
             </button>
           </div>
         )}
@@ -135,11 +136,12 @@ export function VideoStage() {
 }
 
 function NowBadge({ status }: { status: StatusMessage }) {
-  const now = describeNow(status);
+  const t = useT();
+  const now = describeNow(status, t);
   return (
     <div className={`now state-${now.attention}`}>
       <div className="now-row">
-        <span className="now-state">{STATE_LABEL[now.attention]}</span>
+        <span className="now-state">{t.video.state[now.attention]}</span>
         <span className="now-detail">{now.detail}</span>
       </div>
       <div className="now-progress">
@@ -150,6 +152,7 @@ function NowBadge({ status }: { status: StatusMessage }) {
 }
 
 function CalibrationOverlay({ calibration }: { calibration: CalibrationInfo }) {
+  const t = useT();
   const counting = calibration.phase === "countdown";
   const done = Math.min(1, Math.max(0, 1 - calibration.remaining_s / calibration.phase_s));
   return (
@@ -161,7 +164,7 @@ function CalibrationOverlay({ calibration }: { calibration: CalibrationInfo }) {
         </svg>
         <span>{counting ? Math.ceil(calibration.remaining_s) : "●"}</span>
       </div>
-      <div className="calib-text">{counting ? "Look at the screen" : "Hold still…"}</div>
+      <div className="calib-text">{counting ? t.video.lookAtScreen : t.video.holdStill}</div>
     </div>
   );
 }

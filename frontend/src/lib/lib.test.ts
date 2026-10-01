@@ -4,6 +4,10 @@ import { decodeFrame } from "../protocol/frame";
 import { makeStatus } from "../test/fixtures";
 import { seconds, signed } from "./format";
 import { pageFromHash } from "../hooks/usePage";
+import { eventText } from "../i18n";
+import { en } from "../i18n/en";
+import { ruPlural } from "../i18n/plural";
+import { ru } from "../i18n/ru";
 import { describeNow } from "./now";
 import { faceShare, formatClock, nextStep } from "./recording";
 import { MAX_GAP_MS, toRuns } from "./timeline";
@@ -50,7 +54,7 @@ describe("toRuns", () => {
 
 describe("describeNow", () => {
   it("counts down to a pause while the viewers look away", () => {
-    const now = describeNow(makeStatus({ room: { attention: "away" }, machine: { streak_s: 0.6 } }));
+    const now = describeNow(makeStatus({ room: { attention: "away" }, machine: { streak_s: 0.6 } }), en);
 
     expect(now.detail).toBe("pausing in 0.9 s");
     expect(now.progress).toBeCloseTo(0.4);
@@ -63,6 +67,7 @@ describe("describeNow", () => {
         machine: { paused_by_us: true, streak_s: 0.25 },
         room: { attention: "looking" },
       }),
+      en,
     );
 
     expect(now.detail).toBe("resuming in 0.3 s");
@@ -72,9 +77,11 @@ describe("describeNow", () => {
   it("never promises a pause in a dry run", () => {
     const counting = describeNow(
       makeStatus({ automation: { dry_run: true }, room: { attention: "away" }, machine: { streak_s: 0.6 } }),
+      en,
     );
     const decided = describeNow(
       makeStatus({ automation: { dry_run: true }, room: { attention: "away" }, machine: { skipped: "pause" } }),
+      en,
     );
 
     expect(counting.detail).toBe("would pause in 0.9 s");
@@ -83,20 +90,20 @@ describe("describeNow", () => {
   });
 
   it("leaves a pause from the remote alone", () => {
-    const now = describeNow(makeStatus({ player: { playback: "paused" }, machine: { paused_by_us: false } }));
+    const now = describeNow(makeStatus({ player: { playback: "paused" }, machine: { paused_by_us: false } }), en);
 
     expect(now.detail).toBe("paused from the remote · left alone");
     expect(now.progress).toBe(0);
   });
 
   it("does nothing while automation is off", () => {
-    const now = describeNow(makeStatus({ automation: { enabled: false }, room: { attention: "away" } }));
+    const now = describeNow(makeStatus({ automation: { enabled: false }, room: { attention: "away" } }), en);
 
     expect(now.detail).toBe("automation is off");
   });
 
   it("waits for a look after a manual play", () => {
-    const now = describeNow(makeStatus({ machine: { armed: false }, room: { attention: "away" } }));
+    const now = describeNow(makeStatus({ machine: { armed: false }, room: { attention: "away" } }), en);
 
     expect(now.detail).toBe("waiting for someone to look");
   });
@@ -127,5 +134,32 @@ describe("recording helpers", () => {
   it("routes #record to the recording page", () => {
     expect(pageFromHash("#record")).toBe("record");
     expect(pageFromHash("")).toBe("live");
+  });
+});
+
+describe("Russian", () => {
+  it("counts down with a decimal comma", () => {
+    const now = describeNow(makeStatus({ room: { attention: "away" }, machine: { streak_s: 0.6 } }), ru);
+
+    expect(now.detail).toBe("пауза через 0,9 с");
+  });
+
+  it("picks the plural form", () => {
+    expect([1, 3, 5, 21].map((n) => ruPlural(n, ["кадр", "кадра", "кадров"]))).toEqual([
+      "кадр",
+      "кадра",
+      "кадров",
+      "кадр",
+    ]);
+  });
+
+  it("phrases events from their code and values, and falls back to the server text", () => {
+    const event = { ts: 1, time: "12:00:00", level: "info", kind: "pause", text: "paused: looked away for 1.6s" } as const;
+    const paused = { ...event, code: "paused", params: { reason: "looked_away", seconds: 1.6 } };
+    const unknown = { ...event, code: "something_new", params: {} };
+
+    expect(eventText(paused, ru)).toBe("пауза: отвлёкся на 1,6 с");
+    expect(eventText(paused, en)).toBe("paused: looked away for 1.6s");
+    expect(eventText(unknown, ru)).toBe("paused: looked away for 1.6s");
   });
 });

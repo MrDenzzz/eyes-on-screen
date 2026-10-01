@@ -12,9 +12,7 @@ from enum import StrEnum
 from eyes_on_screen.appletv.state import Playback, PlayerState
 from eyes_on_screen.attention.classifier import Attention
 from eyes_on_screen.config import BehaviorConfig, FaceLostAction
-from eyes_on_screen.logging_setup import EVENTS_LOGGER
-
-events = logging.getLogger(EVENTS_LOGGER)
+from eyes_on_screen.events import emit
 
 # A command the Apple TV has not confirmed by then is considered lost and may be resent.
 COMMAND_TIMEOUT_S = 3.0
@@ -31,10 +29,29 @@ class PlaybackCommand(StrEnum):
     RESUME = "resume"
 
 
+class Reason(StrEnum):
+    LOOKED_AWAY = "looked_away"
+    NO_VIEWER = "no_viewer"
+    LOOKING = "looking"
+
+
+_REASON_TEXT = {
+    Reason.LOOKED_AWAY: "looked away for %.1fs",
+    Reason.NO_VIEWER: "no viewer for %.1fs",
+    Reason.LOOKING: "looking at the screen for %.1fs",
+}
+
+
 @dataclass(frozen=True, slots=True)
 class Decision:
     command: PlaybackCommand
-    reason: str
+    reason: Reason
+    seconds: float
+    """How long the attention behind the decision had lasted."""
+
+    @property
+    def why(self) -> str:
+        return _REASON_TEXT[self.reason] % self.seconds
 
 
 @dataclass(frozen=True, slots=True)
@@ -131,13 +148,16 @@ class PlaybackStateMachine:
                 self._pending = None
             elif previous is not Playback.PAUSED:
                 if self._paused_by_us or previous is not None:
-                    events.info("paused by someone else: will not resume it")
+                    emit("paused_elsewhere", "paused by someone else: will not resume it")
                 self._paused_by_us = False
         elif state.playback is Playback.PLAYING:
             if pending is PlaybackCommand.RESUME:
                 self._pending = None
             elif previous in _DELIBERATE_START_FROM:
-                events.info("playback started by someone else: waiting for a viewer to look")
+                emit(
+                    "started_elsewhere",
+                    "playback started by someone else: waiting for a viewer to look",
+                )
                 self._armed = False
             self._paused_by_us = False
         elif previous is Playback.PAUSED and self._paused_by_us:
@@ -163,29 +183,36 @@ class PlaybackStateMachine:
         behavior = self._behavior
         if self._playback is Playback.PLAYING and self._armed:
             if attention is Attention.AWAY and streak >= behavior.pause_after_s:
-                return self._send(PlaybackCommand.PAUSE, f"looked away for {streak:.1f}s", now)
+                return self._send(PlaybackCommand.PAUSE, Reason.LOOKED_AWAY, streak, now)
             if (
                 attention is Attention.ABSENT
                 and behavior.on_face_lost is FaceLostAction.PAUSE
                 and streak >= behavior.face_lost_after_s
             ):
-                return self._send(PlaybackCommand.PAUSE, f"no viewer for {streak:.1f}s", now)
+                return self._send(PlaybackCommand.PAUSE, Reason.NO_VIEWER, streak, now)
         if (
             self._playback is Playback.PAUSED
             and self._paused_by_us
             and attention is Attention.LOOKING
             and streak >= behavior.resume_after_s
         ):
-            return self._send(
-                PlaybackCommand.RESUME, f"looking at the screen for {streak:.1f}s", now
-            )
+            return self._send(PlaybackCommand.RESUME, Reason.LOOKING, streak, now)
         return None
 
-    def _send(self, command: PlaybackCommand, reason: str, now: float) -> Decision:
+    def _send(
+        self, command: PlaybackCommand, reason: Reason, streak: float, now: float
+    ) -> Decision:
         self._pending = (command, now)
-        return Decision(command, reason)
+        return Decision(command, reason, round(streak, 1))
 
     def _expire_pending(self, now: float) -> None:
         if self._pending is not None and now - self._pending[1] > COMMAND_TIMEOUT_S:
-            events.warning("%s was not confirmed by the Apple TV; may retry", self._pending[0])
+            command = self._pending[0]
+            emit(
+                "not_confirmed",
+                "%s was not confirmed by the Apple TV; may retry",
+                command,
+                level=logging.WARNING,
+                params={"command": command.value},
+            )
             self._pending = None

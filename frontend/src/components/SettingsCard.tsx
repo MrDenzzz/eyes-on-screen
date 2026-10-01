@@ -2,24 +2,12 @@ import { type CSSProperties, useEffect, useRef, useState } from "react";
 
 import { api } from "../api";
 import { run } from "../eos";
-import { seconds, signed } from "../lib/format";
-import type { FaceLostAction, MultipleViewers, SettingsChanges } from "../protocol/types";
+import { useT } from "../hooks/useT";
+import type { SettingsChanges } from "../protocol/types";
 import { useEos } from "../store";
 
 const SAVE_DELAY_MS = 350;
 const SAVED_FLASH_MS = 1500;
-
-const VIEWER_MODES: Record<MultipleViewers, string> = {
-  any_away: "Any away",
-  all_away: "All away",
-  nearest: "Nearest",
-};
-const VIEWER_HINTS: Record<MultipleViewers, string> = {
-  any_away: "Pause as soon as anyone in the zone looks away.",
-  all_away: "Keep playing while at least one viewer watches.",
-  nearest: "Follow only the viewer closest to the TV.",
-};
-const FACE_LOST: Record<FaceLostAction, string> = { pause: "Pause", ignore: "Keep playing" };
 
 function useSavedFlash(): [boolean, () => void] {
   const [shown, setShown] = useState(false);
@@ -108,10 +96,12 @@ export function RangeSetting({ label, value, min, max, step, format, onCommit }:
 
 export function SettingsCard() {
   const settings = useEos((state) => state.status?.settings ?? null);
+  const t = useT();
+  const words = t.settings;
   const [saved, flashSaved] = useSavedFlash();
 
   async function save(changes: SettingsChanges): Promise<boolean> {
-    const ok = await run(api.changeSettings(changes), "Not saved");
+    const ok = await run(api.changeSettings(changes), words.notSaved);
     if (ok) flashSaved();
     return ok;
   }
@@ -120,35 +110,36 @@ export function SettingsCard() {
     return (
       <div className="card">
         <div className="card-head">
-          <h2>Settings</h2>
+          <h2>{words.title}</h2>
         </div>
-        <div className="hint">Waiting for eos…</div>
+        <div className="hint">{words.waiting}</div>
       </div>
     );
   }
   const { behavior, pose } = settings;
-  const degrees = (value: number) => `±${value}°`;
+  const { seconds, degrees, signed } = t.fmt;
+  const [hintBefore, hintButton, hintAfter] = words.calibrateHint;
 
   return (
     <div className="card">
       <div className="card-head">
-        <h2>Settings</h2>
-        <span className={`saved${saved ? " show" : ""}`}>Saved</span>
+        <h2>{words.title}</h2>
+        <span className={`saved${saved ? " show" : ""}`}>{words.saved}</span>
       </div>
 
       <div className="setting">
-        <div className="setting-label">Several viewers</div>
+        <div className="setting-label">{words.severalViewers}</div>
         <Segmented
-          label="Several viewers"
+          label={words.severalViewers}
           value={behavior.multiple_viewers}
-          options={VIEWER_MODES}
+          options={words.modes}
           onChange={(multiple_viewers) => void save({ behavior: { multiple_viewers } })}
         />
-        <div className="hint">{VIEWER_HINTS[behavior.multiple_viewers]}</div>
+        <div className="hint">{words.modeHints[behavior.multiple_viewers]}</div>
       </div>
 
       <RangeSetting
-        label="Pause after looking away"
+        label={words.pauseAfter}
         value={behavior.pause_after_s}
         min={0.5}
         max={5}
@@ -157,7 +148,7 @@ export function SettingsCard() {
         onCommit={(pause_after_s) => save({ behavior: { pause_after_s } })}
       />
       <RangeSetting
-        label="Resume after looking back"
+        label={words.resumeAfter}
         value={behavior.resume_after_s}
         min={0.1}
         max={3}
@@ -167,17 +158,17 @@ export function SettingsCard() {
       />
 
       <div className="setting">
-        <div className="setting-label">When nobody is there</div>
+        <div className="setting-label">{words.whenNobody}</div>
         <Segmented
-          label="When nobody is there"
+          label={words.whenNobody}
           value={behavior.on_face_lost}
-          options={FACE_LOST}
+          options={words.faceLost}
           onChange={(on_face_lost) => void save({ behavior: { on_face_lost } })}
         />
       </div>
       {behavior.on_face_lost === "pause" && (
         <RangeSetting
-          label="…after"
+          label={words.after}
           value={behavior.face_lost_after_s}
           min={1}
           max={15}
@@ -187,20 +178,20 @@ export function SettingsCard() {
         />
       )}
 
-      <div className="setting-group">Head pose</div>
+      <div className="setting-group">{words.headPose}</div>
       <div className="setting">
         <div className="setting-label">
-          Screen direction
-          <output>
-            yaw {signed(pose.yaw_center_deg, 1)}° · pitch {signed(pose.pitch_center_deg, 1)}°
-          </output>
+          {words.screenDirection}
+          <output>{t.viewers.angles(signed(pose.yaw_center_deg, 1), signed(pose.pitch_center_deg, 1))}</output>
         </div>
         <div className="hint">
-          Set by <b>Calibrate</b> while looking at the screen.
+          {hintBefore}
+          <b>{hintButton}</b>
+          {hintAfter}
         </div>
       </div>
       <RangeSetting
-        label="Turn left/right allowed"
+        label={words.yawTolerance}
         value={pose.yaw_tolerance_deg}
         min={5}
         max={45}
@@ -209,7 +200,7 @@ export function SettingsCard() {
         onCommit={(yaw_tolerance_deg) => save({ pose: { yaw_tolerance_deg } })}
       />
       <RangeSetting
-        label="Tilt up/down allowed"
+        label={words.pitchTolerance}
         value={pose.pitch_tolerance_deg}
         min={5}
         max={40}

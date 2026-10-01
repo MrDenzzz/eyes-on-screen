@@ -204,6 +204,31 @@
           ],
           "type": "string"
         },
+        "code": {
+          "type": "string"
+        },
+        "params": {
+          "additionalProperties": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "integer"
+              },
+              {
+                "type": "number"
+              },
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "type": "object"
+        },
         "text": {
           "type": "string"
         }
@@ -213,6 +238,8 @@
         "time",
         "level",
         "kind",
+        "code",
+        "params",
         "text"
       ],
       "title": "EventInfo",
@@ -682,6 +709,9 @@
     "RecordingStepInfo": {
       "additionalProperties": false,
       "properties": {
+        "id": {
+          "type": "string"
+        },
         "label": {
           "type": "string"
         },
@@ -696,6 +726,7 @@
         }
       },
       "required": [
+        "id",
         "label",
         "title",
         "instruction",
